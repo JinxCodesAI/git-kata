@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String     @id @default(uuid())
+  name       String     @default("anonymous")
+  createdAt  DateTime   @default(now())
+  lastActive DateTime   @updatedAt
+  attempts   Attempt[]
+  scores     Score[]
+}
+
+model Exercise {
+  id String @id @default(uuid())
+  level Int
+  category String
+  title String
+  path String @db.Text
+  timeLimit Int @default(600)
+  order Int @default(0)
+  attempts Attempt[]
+  scores Score[]
+
+  @@index([level, category])
+  @@index([order])
+}
+
+model Attempt {
+  id         String   @id @default(uuid())
+  userId     String
+  exerciseId String
+  user       User     @relation(fields: [userId], references: [id])
+  exercise   Exercise @relation(fields: [exerciseId], references: [id])
+  commands   String   @db.Text
+  output     String   @db.Text
+  passed     Boolean
+  score      Int
+  feedback   String   @db.Text
+  duration   Int
+  createdAt  DateTime @default(now())
+
+  @@index([userId, exerciseId])
+  @@index([createdAt])
+}
+
+model Score {
+  id          String   @id @default(uuid())
+  userId      String
+  exerciseId  String
+  user        User     @relation(fields: [userId], references: [id])
+  exercise    Exercise @relation(fields: [exerciseId], references: [id])
+  bestScore   Int      @default(0)
+  completions Int      @default(0)
+  bestTime    Int?
+
+  @@unique([userId, exerciseId])
+}
+
+model Config {
+  key   String @id
+  value String
+}

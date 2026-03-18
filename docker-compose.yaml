@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: gitkata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  sandbox-base:
+    build:
+      context: ./sandbox
+      dockerfile: Dockerfile
+    image: gitkata-sandbox:latest
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "12000:3000"
+    environment:
+      DATABASE_URL: ${DB_URL}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic/v1/messages}
+      SANDBOX_IMAGE: gitkata-sandbox:latest
+      EXERCISES_PATH: /exercises
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - sessions:/sessions
+      - ./exercises:/exercises:ro
+      # Uncomment the following line for development with hot-reload:
+      # - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  sessions:
