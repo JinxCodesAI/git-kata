@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Home } from 'lucide-react';
+import ErrorModal from '@/app/components/ErrorModal';
 
 interface User {
   id: string;
@@ -127,10 +128,15 @@ export default function ProfilePage() {
         <main className="main-content">
           <div className="terminal-container">
             <div className="terminal-output" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <span style={{ color: 'var(--error)' }}>Error: {error || 'Failed to load profile'}</span>
+              <span style={{ color: 'var(--text-dim)' }}>Loading profile...</span>
             </div>
           </div>
         </main>
+        <ErrorModal
+          isOpen={true}
+          onClose={() => setError(null)}
+          message={error || 'Failed to load profile'}
+        />
       </div>
     );
   }
