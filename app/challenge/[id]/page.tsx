@@ -289,16 +289,18 @@ export default function ChallengePage() {
                 }),
             });
 
-            const data = await res.json();
-            setFeedback(data);
-            setShowFeedback(true);
+            if (!res.ok) {
+                const data = await res.json();
+                setErrorMessage(data.error || 'An error occurred');
+                setShowErrorModal(true);
+            } else {
+                const data = await res.json();
+                setFeedback(data);
+                setShowFeedback(true);
+            }
         } catch (err) {
-            setFeedback({
-                passed: false,
-                score: 0,
-                feedback: 'Failed to submit solution. Please try again.',
-            });
-            setShowFeedback(true);
+            setErrorMessage('Failed to submit solution. Please try again.');
+            setShowErrorModal(true);
         } finally {
             setIsSubmitting(false);
         }
