@@ -8,8 +8,10 @@ import prisma from '@/lib/prisma';
 import { loadExerciseSpec } from '@/lib/exercise-loader';
 
 export async function POST(request: Request) {
+  console.log('[ATTEMPT] ===== POST /api/attempt called =====');
   try {
     const { sessionId, exerciseId, userId, duration } = await request.json();
+    console.log('[ATTEMPT] Request body:', { sessionId, exerciseId, userId, duration });
     
     if (!sessionId || !exerciseId || !userId) {
       return NextResponse.json(
@@ -49,30 +51,35 @@ export async function POST(request: Request) {
     const commands = session.commands.map((c) => c.command);
     
     // Run verify.sh to validate the solution
-    const containerName = `gitkata-${sessionId}`;
+    // verify.sh runs in web-app context (not sandbox) because session dir is mounted there
     const sessionDir = `/app/sessions/${userId}/${sessionId}`;
-    const solutionPath = await sandbox.getSolutionRepo(exercise.path);
-    const verifyScriptPath = `${solutionPath}/../verify.sh`;
     
     let verificationOutput = '';
     try {
-      // Run verify.sh with user workspace and solution paths
-      const verifyResult = await sandbox.execInContainer(
-        containerName,
-        `bash /exercises/solutions/${exercise.path}/verify.sh /workspace /workspace`
-      );
+      // Run verify.sh from web-app container where session dir is accessible
+      // Both USER_DIR and SOLUTION_DIR point to sessionDir since we copied problem content there
+      const verifyCommand = `bash ${sessionDir}/verify.sh ${sessionDir} ${sessionDir}`;
+      console.log('[ATTEMPT] Running verify.sh in web-app context:', verifyCommand);
+      const verifyResult = await sandbox.execInWebApp(verifyCommand, sessionDir);
       verificationOutput = verifyResult.stdout + verifyResult.stderr;
+      console.log('[ATTEMPT] verify.sh stdout:', verifyResult.stdout);
+      console.log('[ATTEMPT] verify.sh stderr:', verifyResult.stderr);
+      console.log('[ATTEMPT] verify.sh exitCode:', verifyResult.exitCode);
     } catch (e) {
       verificationOutput = 'Error running verification script: ' + String(e);
+      console.error('[ATTEMPT] verify.sh error:', e);
     }
+    console.log('[ATTEMPT] Final verificationOutput:', verificationOutput);
     
     // Evaluate with LLM using verification output
+    console.log('[ATTEMPT] Calling minimax.evaluateAttempt...');
     const evaluation = await minimax.evaluateAttempt({
       exerciseTitle: exercise.title,
       exerciseDescription: exerciseDescription,
       userCommands: commands,
       verificationOutput,
     });
+    console.log('[ATTEMPT] LLM evaluation result:', evaluation);
     
     // Save attempt
     const attempt = await prisma.attempt.create({

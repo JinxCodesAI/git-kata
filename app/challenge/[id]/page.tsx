@@ -272,11 +272,19 @@ export default function ChallengePage() {
 
     // Submit solution
     const handleSubmitSolution = async () => {
-        if (!session || !exercise) return;
+        console.log('[FRONTEND] handleSubmitSolution called');
+        console.log('[FRONTEND] session:', session);
+        console.log('[FRONTEND] exercise:', exercise);
+        if (!session || !exercise) {
+            console.log('[FRONTEND] Early return - session or exercise is null');
+            return;
+        }
 
         setIsSubmitting(true);
         try {
             const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
+            const userId = localStorage.getItem('gitkata_user_id');
+            console.log('[FRONTEND] Submitting with:', { sessionId: session.sessionId, exerciseId: exercise.id, userId, duration });
 
             const res = await fetch('/api/attempt', {
                 method: 'POST',
@@ -284,21 +292,25 @@ export default function ChallengePage() {
                 body: JSON.stringify({
                     sessionId: session.sessionId,
                     exerciseId: exercise.id,
-                    userId: localStorage.getItem('gitkata_user_id'),
+                    userId: userId,
                     duration,
                 }),
             });
+            console.log('[FRONTEND] Response status:', res.status);
 
             if (!res.ok) {
                 const data = await res.json();
+                console.log('[FRONTEND] Error response:', data);
                 setErrorMessage(data.error || 'An error occurred');
                 setShowErrorModal(true);
             } else {
                 const data = await res.json();
+                console.log('[FRONTEND] Success response:', data);
                 setFeedback(data);
                 setShowFeedback(true);
             }
         } catch (err) {
+            console.error('[FRONTEND] Catch error:', err);
             setErrorMessage('Failed to submit solution. Please try again.');
             setShowErrorModal(true);
         } finally {

@@ -64,6 +64,19 @@ async function copyExerciseToSession(
   const exerciseRepoPath = path.join(process.env.EXERCISES_PATH || '/exercises', 'problems', exerciseName, 'content');
   await fs.cp(exerciseRepoPath, sessionDir, { recursive: true });
   console.log(`[DOCKER] Exercise content copied: ${exerciseName} to ${sessionDir}`);
+  
+  // Also copy verify.sh from solutions folder into session directory
+  // This is needed because verify.sh runs in web-app context (not sandbox)
+  // and needs access to the session directory
+  const verifyScriptSrc = path.join(process.env.EXERCISES_PATH || '/exercises', 'solutions', exerciseName, 'verify.sh');
+  const verifyScriptDst = path.join(sessionDir, 'verify.sh');
+  try {
+    await fs.copyFile(verifyScriptSrc, verifyScriptDst);
+    console.log(`[DOCKER] verify.sh copied: ${verifyScriptSrc} -> ${verifyScriptDst}`);
+  } catch (e) {
+    console.error(`[DOCKER] Failed to copy verify.sh: ${e}`);
+    throw e; // Re-throw since verify.sh is critical for evaluation
+  }
 }
 
 async function loadExerciseSpec(exercisePath: string): Promise<ExerciseSpec> {
@@ -73,11 +86,15 @@ async function loadExerciseSpec(exercisePath: string): Promise<ExerciseSpec> {
 }
 
 async function getSolutionRepo(exercisePath: string): Promise<string> {
-  return path.join(process.env.EXERCISES_PATH || '/exercises', 'solutions', exercisePath, 'content');
+  // exercisePath is 'problems/commit-basic-01', need to strip 'problems/' to get 'commit-basic-01'
+  const exerciseName = exercisePath.replace(/^problems\//, '');
+  return path.join(process.env.EXERCISES_PATH || '/exercises', 'solutions', exerciseName, 'content');
 }
 
 async function getSolutionPath(exercisePath: string): Promise<string> {
-  return path.join(process.env.EXERCISES_PATH || '/exercises', 'solutions', exercisePath);
+  // exercisePath is 'problems/commit-basic-01', need to strip 'problems/' to get 'commit-basic-01'
+  const exerciseName = exercisePath.replace(/^problems\//, '');
+  return path.join(process.env.EXERCISES_PATH || '/exercises', 'solutions', exerciseName);
 }
 
 async function execInContainer(
@@ -88,6 +105,31 @@ async function execInContainer(
     const dockerCmd = `docker exec -w /workspace ${containerName} sh -c "${command.replace(/"/g, '\\"')}"`;
     console.log(`[DOCKER] Exec command: ${dockerCmd}`);
     const { stdout, stderr } = await execAsync(dockerCmd);
+    return { stdout, stderr, exitCode: 0 };
+  } catch (error: any) {
+    return {
+      stdout: error.stdout || '',
+      stderr: error.stderr || error.message,
+      exitCode: error.code || 1,
+    };
+  }
+}
+
+/**
+ * Execute a command in the web-app container context (not sandbox).
+ * Used for running verification scripts that need access to session directories.
+ * Session directories are mounted at SESSIONS_DIR in the web-app container.
+ */
+async function execInWebApp(
+  command: string,
+  workingDir?: string
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  try {
+    // Escape double quotes in the command
+    const escapedCommand = command.replace(/"/g, '\\"');
+    const cdCmd = workingDir ? `cd "${workingDir}" && ${escapedCommand}` : escapedCommand;
+    console.log(`[WEBAPP] Exec command: ${cdCmd}`);
+    const { stdout, stderr } = await execAsync(cdCmd);
     return { stdout, stderr, exitCode: 0 };
   } catch (error: any) {
     return {
@@ -180,6 +222,7 @@ export const sandbox = {
   getSolutionRepo,
   getSolutionPath,
   execInContainer,
+  execInWebApp,
   getRepoState,
   destroyContainer,
   cleanupSessionDir,

@@ -14,13 +14,21 @@ interface EvaluationContext {
 }
 
 async function evaluateAttempt(context: EvaluationContext): Promise<EvaluationResult> {
+  console.log('[MINIMAX] Starting evaluation for:', context.exerciseTitle);
+  console.log('[MINIMAX] Verification output:', context.verificationOutput);
+  console.log('[MINIMAX] User commands:', context.userCommands);
+  
   const prompt = buildPrompt(context);
+  console.log('[MINIMAX] Built prompt, length:', prompt.length);
+  console.log('[MINIMAX] Full prompt:\n', prompt);
   
   const maxRetries = 3;
   let lastError: Error | null = null;
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    console.log('[MINIMAX] Attempt', attempt + 1, 'of', maxRetries + 1);
     try {
+      console.log('[MINIMAX] Calling MiniMax API...');
       const response = await fetch(process.env.MINIMAX_BASE_URL!, {
         method: 'POST',
         headers: {
@@ -51,25 +59,38 @@ Score guidelines:
         }),
         signal: AbortSignal.timeout(60000),
       });
+      console.log('[MINIMAX] API response status:', response.status);
       
       if (!response.ok) {
         throw new Error(`MiniMax API error: ${response.status}`);
       }
       
       const data = await response.json();
-      const content = data.content?.[0]?.text || '';
+      console.log('[MINIMAX] API response data:', JSON.stringify(data));
+      
+      // Find the text content (not thinking block) by iterating through content array
+      let content = '';
+      for (const item of data.content || []) {
+        if (item.type === 'text') {
+          content = item.text || '';
+          break;
+        }
+      }
+      console.log('[MINIMAX] LLM response content:', content);
       
       // Parse JSON from response
       try {
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
+          console.log('[MINIMAX] Parsed JSON:', jsonMatch[0]);
           return JSON.parse(jsonMatch[0]);
         }
       } catch (e) {
-        console.error('Failed to parse LLM response:', content);
+        console.error('[MINIMAX] Failed to parse LLM response:', content);
       }
       
       // Fallback
+      console.log('[MINIMAX] Using fallback - could not parse JSON from LLM response');
       return {
         passed: false,
         score: 0,
@@ -77,15 +98,18 @@ Score guidelines:
       };
     } catch (error) {
       lastError = error as Error;
+      console.error('[MINIMAX] Attempt', attempt + 1, 'failed:', error);
       if (attempt < maxRetries) {
         // Exponential backoff: 1s, 2s, 4s
         const delay = Math.pow(2, attempt) * 1000;
+        console.log('[MINIMAX] Waiting', delay, 'ms before retry...');
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
   
   // After retry limit exhausted, throw error to result in 500 response
+  console.error('[MINIMAX] All retries exhausted, throwing error');
   throw lastError;
 }
 
