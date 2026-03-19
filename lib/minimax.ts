@@ -16,17 +16,22 @@ interface EvaluationContext {
 async function evaluateAttempt(context: EvaluationContext): Promise<EvaluationResult> {
   const prompt = buildPrompt(context);
   
-  const response = await fetch(process.env.MINIMAX_BASE_URL!, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.MINIMAX_API_KEY!,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'MiniMax-M2.5-highspeed',
-      max_tokens: 1024,
-      system: `You are a Git instructor evaluating a student's solution.
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(process.env.MINIMAX_BASE_URL!, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.MINIMAX_API_KEY!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'MiniMax-M2.5-highspeed',
+          max_tokens: 1024,
+          system: `You are a Git instructor evaluating a student's solution.
 Provide constructive, encouraging feedback.
 Be strict but fair in your evaluation.
 Always respond with valid JSON in this exact format:
@@ -37,38 +42,51 @@ Score guidelines:
 - 70-89: Correct solution but could be improved
 - 50-69: Partially correct, missing key steps
 - 0-49: Incorrect or incomplete solution`,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    }),
-  });
-  
-  if (!response.ok) {
-    throw new Error(`MiniMax API error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  const content = data.content?.[0]?.text || '';
-  
-  // Parse JSON from response
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`MiniMax API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const content = data.content?.[0]?.text || '';
+      
+      // Parse JSON from response
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+      } catch (e) {
+        console.error('Failed to parse LLM response:', content);
+      }
+      
+      // Fallback
+      return {
+        passed: false,
+        score: 0,
+        feedback: 'Failed to evaluate submission. Please try again.',
+      };
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
-  } catch (e) {
-    console.error('Failed to parse LLM response:', content);
   }
   
-  // Fallback
-  return {
-    passed: false,
-    score: 0,
-    feedback: 'Failed to evaluate submission. Please try again.',
-  };
+  // After retry limit exhausted, throw error to result in 500 response
+  throw lastError;
 }
 
 function buildPrompt(context: EvaluationContext): string {
