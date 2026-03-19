@@ -312,7 +312,14 @@ export default function ChallengePage() {
 
         try {
             // Destroy current session
-            await fetch(`/api/sandbox/${session.sessionId}`, { method: 'DELETE' });
+            const deleteRes = await fetch(`/api/sandbox/${session.sessionId}`, { method: 'DELETE' });
+
+            if (!deleteRes.ok) {
+                const errorData = await deleteRes.json().catch(() => ({}));
+                setErrorMessage(errorData.error || 'Failed to destroy sandbox');
+                setShowErrorModal(true);
+                return;
+            }
 
             // Create new session
             const userId = localStorage.getItem('gitkata_user_id');
