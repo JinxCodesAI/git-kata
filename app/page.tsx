@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect } from 'react';
+
 const ASCII_ART = `
 ███████╗ ██╗████████╗
 ██╔════╝ ██║╚══██╔══╝
@@ -21,6 +25,11 @@ const LEVELS = [
 ];
 
 export default function LandingPage() {
+  useEffect(() => {
+    const userId = localStorage.getItem('gitkata_user_id');
+    console.log('USER_ID:', userId);
+  }, []);
+
   return (
     <div className="app-container">
       <nav className="navbar">

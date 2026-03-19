@@ -46,6 +46,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./sessions:/app/sessions
       - ./exercises:/exercises:ro
+      - ./tests:/app/tests
       - .:/app
     depends_on:
       db:

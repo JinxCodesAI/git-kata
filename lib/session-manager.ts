@@ -16,12 +16,7 @@ const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 const sessions = new Map<string, Session>();
 const cleanupInterval = setInterval(cleanupSessions, 60 * 1000);
 
-function generateSessionId(): string {
-  return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
-function createSession(userId: string, exerciseId: string, containerId: string): Session {
-  const sessionId = generateSessionId();
+function createSession(userId: string, exerciseId: string, containerId: string, sessionId: string): Session {
   const session: Session = {
     id: sessionId,
     userId,
@@ -86,6 +81,10 @@ async function destroySessionByUserId(userId: string): Promise<void> {
   }
 }
 
+async function clearAllSessions(): Promise<void> {
+  sessions.clear();
+}
+
 async function cleanupSessions(): Promise<void> {
   const now = Date.now();
   for (const [id, session] of sessions.entries()) {
@@ -105,4 +104,5 @@ export const sessionManager = {
   destroySession,
   destroySessionByUserId,
   cleanupSessions,
+  clearAllSessions,
 };

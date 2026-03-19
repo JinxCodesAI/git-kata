@@ -97,6 +97,7 @@ body {
 
 .terminal-container {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-dim);
@@ -113,10 +114,17 @@ body {
 
 .terminal-output {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 1rem;
   white-space: pre-wrap;
   word-break: break-all;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.terminal-output::-webkit-scrollbar {
+  display: none;
 }
 
 .terminal-line {

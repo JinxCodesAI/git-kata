@@ -116,7 +116,7 @@ export default function ChallengePage() {
                 // Get or create user ID
                 let userId = localStorage.getItem('gitkata_user_id');
                 if (!userId) {
-                    userId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    userId = crypto.randomUUID();
                     localStorage.setItem('gitkata_user_id', userId);
                 }
 
@@ -344,6 +344,10 @@ export default function ChallengePage() {
             if (stateRes.ok) {
                 const stateData = await stateRes.json();
                 setCurrentBranch(stateData.branch);
+            } else {
+                const errorData = await stateRes.json().catch(() => ({}));
+                setErrorMessage(errorData.error || `Failed to load state (${stateRes.status})`);
+                setShowErrorModal(true);
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to reset exercise');

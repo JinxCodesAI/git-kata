@@ -84,18 +84,6 @@ docker compose -f docker-compose.dev.yaml down
 ```bash
 # Run tests inside the development container
 docker compose -f docker-compose.dev.yaml exec app npm test
-
-# Or run tests on host machine (requires Node.js)
-npm test
-```
-
-### Running Tests
-```bash
-# Run tests inside the development container
-docker compose -f docker-compose.dev.yaml exec app npm test
-
-# Or run tests on host machine (requires Node.js)
-npm test
 ```
 
 ---

@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     const sessionDir = `/app/sessions/${userId}/${sessionId}`;
     await sandbox.copyExerciseToSession(exercise.path, sessionDir);
     
-    const session = sessionManager.createSession(sessionId, userId, exerciseId, containerId);
+    const session = sessionManager.createSession(userId, exerciseId, containerId, sessionId);
     
     console.log(`[SANDBOX] Created new session ${sessionId} for user ${userId} exercise ${exerciseId}`);
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
