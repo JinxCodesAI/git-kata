@@ -29,24 +29,25 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
 
-    let user;
+    // userId is required - return 400 if missing
+    if (!userId) {
+      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    }
 
-    if (userId) {
-      // Find existing user
-      user = await prisma.user.findUnique({
-        where: { id: userId },
-      });
-      console.log(`[DB] User lookup: userId=${userId} found=${!!user}`);
+    // Validate userId format (must be valid UUID)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(userId)) {
+      return NextResponse.json({ error: 'Invalid userId format' }, { status: 400 });
+    }
 
-      if (!user) {
-        return NextResponse.json({ error: 'User not found' }, { status: 404 });
-      }
-    } else {
-      // Create anonymous user
-      user = await prisma.user.create({
-        data: { name: 'anonymous' },
-      });
-      console.log(`[DB] Anonymous user created: userId=${user.id}`);
+    // Find existing user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    console.log(`[DB] User lookup: userId=${userId} found=${!!user}`);
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Get all exercises count by level
