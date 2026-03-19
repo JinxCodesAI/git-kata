@@ -22,7 +22,11 @@ export async function POST(request: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
-    
+
+    if (session.userId !== userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
     const exercise = await prisma.exercise.findUnique({
       where: { id: exerciseId },
     });
