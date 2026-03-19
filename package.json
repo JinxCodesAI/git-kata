@@ -9,7 +9,6 @@
     "lint": "next lint",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
-    "db:seed": "tsx prisma/seed.ts",
     "test": "jest"
   },
   "dependencies": {

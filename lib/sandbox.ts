@@ -15,7 +15,7 @@ const CONTAINER_LIMITS = {
   pidsLimit: 64,
 };
 
-const SESSIONS_DIR = '/sessions';
+const SESSIONS_DIR = '/app/sessions';
 
 async function ensureSessionsDir(): Promise<void> {
   try {
@@ -31,9 +31,14 @@ async function createContainer(sessionId: string, userId: string): Promise<strin
 
   const containerName = `gitkata-${sessionId}`;
   
+  // SESSIONS_HOST_PATH is the host path that Docker daemon can access
+  // SESSIONS_DIR is the internal container path
+  const sessionsHostPath = process.env.SESSIONS_HOST_PATH || '/sessions';
+  const hostSessionDir = path.join(sessionsHostPath, userId, sessionId);
+  
   const runCmd = `docker run -d \
     --name ${containerName} \
-    -v ${sessionDir}:/workspace \
+    -v ${hostSessionDir}:/workspace \
     --memory="${CONTAINER_LIMITS.memory}" \
     --memory-reservation="${CONTAINER_LIMITS.memoryReservation}" \
     --cpu-quota=${CONTAINER_LIMITS.cpuQuota} \
@@ -43,15 +48,22 @@ async function createContainer(sessionId: string, userId: string): Promise<strin
     gitkata-sandbox:latest`;
 
   const { stdout } = await execAsync(runCmd);
-  return stdout.trim();
+  const containerId = stdout.trim();
+  console.log(`[DOCKER] Container created: ${containerName} (${containerId})`);
+  console.log(`[DOCKER] Volume mount: ${hostSessionDir}:/workspace`);
+  return containerId;
 }
 
 async function copyExerciseToSession(
   exercisePath: string,
   sessionDir: string
 ): Promise<void> {
-  const exerciseRepoPath = path.join(process.env.EXERCISES_PATH || '/exercises', 'problems', exercisePath, 'content');
+  // exercisePath is stored as 'problems/init-basic-01'
+  // We need to extract just 'init-basic-01' to avoid doubling 'problems/'
+  const exerciseName = exercisePath.replace(/^problems\//, '');
+  const exerciseRepoPath = path.join(process.env.EXERCISES_PATH || '/exercises', 'problems', exerciseName, 'content');
   await fs.cp(exerciseRepoPath, sessionDir, { recursive: true });
+  console.log(`[DOCKER] Exercise content copied: ${exerciseName} to ${sessionDir}`);
 }
 
 async function loadExerciseSpec(exercisePath: string): Promise<ExerciseSpec> {
@@ -73,9 +85,9 @@ async function execInContainer(
   command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   try {
-    const { stdout, stderr } = await execAsync(
-      `docker exec ${containerName} sh -c "${command.replace(/"/g, '\\"')}"`
-    );
+    const dockerCmd = `docker exec -w /workspace ${containerName} sh -c "${command.replace(/"/g, '\\"')}"`;
+    console.log(`[DOCKER] Exec command: ${dockerCmd}`);
+    const { stdout, stderr } = await execAsync(dockerCmd);
     return { stdout, stderr, exitCode: 0 };
   } catch (error: any) {
     return {
@@ -144,6 +156,7 @@ async function destroyContainer(containerName: string): Promise<void> {
   try {
     await execAsync(`docker kill ${containerName}`);
     await execAsync(`docker rm ${containerName}`);
+    console.log(`[DOCKER] Container destroyed: ${containerName}`);
   } catch (e) {
     // Container might not exist
   }
@@ -153,6 +166,7 @@ async function cleanupSessionDir(sessionId: string, userId: string): Promise<voi
   const sessionDir = path.join(SESSIONS_DIR, userId, sessionId);
   try {
     await fs.rm(sessionDir, { recursive: true, force: true });
+    console.log(`[DOCKER] Session directory cleaned up: ${sessionDir}`);
   } catch (e) {
     // Directory might not exist
   }

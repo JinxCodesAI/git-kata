@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ExercisePanel from '@/app/components/ExercisePanel';
 import FeedbackModal from '@/app/components/FeedbackModal';
+import ErrorModal from '@/app/components/ErrorModal';
 
 interface HistoryEntry {
     command: string;
@@ -33,6 +34,14 @@ interface EvaluationResult {
     verificationOutput?: string;
 }
 
+// Map level names to level numbers
+const LEVEL_NAME_TO_NUMBER: Record<string, number> = {
+    'beginner': 1,
+    'intermediate': 2,
+    'advanced': 3,
+    'expert': 4,
+};
+
 export default function ChallengePage() {
     const params = useParams();
     const router = useRouter();
@@ -48,6 +57,8 @@ export default function ChallengePage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showFeedback, setShowFeedback] = useState(false);
     const [feedback, setFeedback] = useState<EvaluationResult | null>(null);
+    const [showErrorModal, setShowErrorModal] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string>('');
     const [currentBranch, setCurrentBranch] = useState<string | null>(null);
 
     const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -56,17 +67,49 @@ export default function ChallengePage() {
 
     // Fetch exercise and initialize session
     useEffect(() => {
+        const abortController = new AbortController();
+
         const initSession = async () => {
             try {
                 setLoading(true);
                 setError(null);
 
+                // Check if exerciseId is a level name (beginner/intermediate/advanced/expert)
+                const levelNumber = LEVEL_NAME_TO_NUMBER[exerciseId];
+                let actualExerciseId = exerciseId;
+
+                if (levelNumber) {
+                    // It's a level name - fetch a random exercise of that level
+                    const exerciseRes = await fetch(`/api/exercises?level=${levelNumber}`, {
+                        signal: abortController.signal,
+                    });
+                    if (abortController.signal.aborted) return;
+                    if (!exerciseRes.ok) {
+                        throw new Error('Failed to load exercises for this level');
+                    }
+                    const exercises = await exerciseRes.json();
+                    if (abortController.signal.aborted) return;
+                    if (exercises.length === 0) {
+                        throw new Error('No exercises found for this level');
+                    }
+                    // Pick a random exercise
+                    const randomIndex = Math.floor(Math.random() * exercises.length);
+                    actualExerciseId = exercises[randomIndex].id;
+                    // Redirect to the actual exercise
+                    router.replace(`/challenge/${actualExerciseId}`);
+                    return;
+                }
+
                 // Fetch exercise from API
-                const exerciseRes = await fetch(`/api/exercises/${exerciseId}`);
+                const exerciseRes = await fetch(`/api/exercises/${actualExerciseId}`, {
+                    signal: abortController.signal,
+                });
+                if (abortController.signal.aborted) return;
                 if (!exerciseRes.ok) {
                     throw new Error('Failed to load exercise');
                 }
                 const exerciseData = await exerciseRes.json();
+                if (abortController.signal.aborted) return;
                 setExercise(exerciseData);
                 setTimeRemaining(exerciseData.timeLimit);
 
@@ -81,27 +124,43 @@ export default function ChallengePage() {
                 const sandboxRes = await fetch('/api/sandbox/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ exerciseId, userId }),
+                    body: JSON.stringify({ exerciseId: actualExerciseId, userId }),
+                    signal: abortController.signal,
                 });
+                if (abortController.signal.aborted) return;
 
                 if (!sandboxRes.ok) {
                     throw new Error('Failed to create sandbox session');
                 }
                 const sessionData = await sandboxRes.json();
+                if (abortController.signal.aborted) return;
                 setSession(sessionData);
                 startTimeRef.current = Date.now();
 
                 // Get initial branch
-                const stateRes = await fetch(`/api/sandbox/state/${sessionData.sessionId}`);
+                const stateRes = await fetch(`/api/sandbox/state/${sessionData.sessionId}`, {
+                    signal: abortController.signal,
+                });
+                if (abortController.signal.aborted) return;
                 if (stateRes.ok) {
                     const stateData = await stateRes.json();
-                    setCurrentBranch(stateData.branch);
+                    if (!abortController.signal.aborted) {
+                        setCurrentBranch(stateData.branch);
+                    }
+                } else {
+                    // State endpoint failed - show error modal
+                    const errorData = await stateRes.json().catch(() => ({}));
+                    setErrorMessage(errorData.error || `Failed to load state (${stateRes.status})`);
+                    setShowErrorModal(true);
                 }
 
             } catch (err) {
+                if (err instanceof Error && err.name === 'AbortError') return;
                 setError(err instanceof Error ? err.message : 'An error occurred');
             } finally {
-                setLoading(false);
+                if (!abortController.signal.aborted) {
+                    setLoading(false);
+                }
             }
         };
 
@@ -110,6 +169,7 @@ export default function ChallengePage() {
         }
 
         return () => {
+            abortController.abort();
             if (timerRef.current) {
                 clearInterval(timerRef.current);
             }
@@ -148,10 +208,6 @@ export default function ChallengePage() {
     const executeCommand = async (command: string) => {
         if (!session) return;
 
-        // Add command to history immediately with empty output
-        const newEntry: HistoryEntry = { command, output: '' };
-        setHistory((prev) => [...prev, newEntry]);
-
         try {
             const res = await fetch('/api/sandbox/exec', {
                 method: 'POST',
@@ -160,14 +216,19 @@ export default function ChallengePage() {
             });
 
             const data = await res.json();
+
+            // Check if the request was successful
+            if (!res.ok) {
+                // Show error feedback in ErrorModal - do NOT add command to history
+                setErrorMessage(data.error || `Command failed with status ${res.status}`);
+                setShowErrorModal(true);
+                return;
+            }
+
             const output = data.output || '';
 
-            // Update the last history entry with output
-            setHistory((prev) => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { command, output };
-                return updated;
-            });
+            // Only add to history if command was successful
+            setHistory((prev) => [...prev, { command, output }]);
 
             // Update current branch if command was git checkout or git switch
             if (command.startsWith('git checkout') || command.startsWith('git switch')) {
@@ -184,11 +245,9 @@ export default function ChallengePage() {
             }
 
         } catch (err) {
-            setHistory((prev) => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { command, output: 'Error executing command' };
-                return updated;
-            });
+            // Show error in ErrorModal - do NOT add command to history
+            setErrorMessage('Failed to execute command. Please check your connection.');
+            setShowErrorModal(true);
         }
     };
 
@@ -438,6 +497,12 @@ export default function ChallengePage() {
                     }}
                 />
             )}
+
+            <ErrorModal
+                isOpen={showErrorModal}
+                onClose={() => setShowErrorModal(false)}
+                message={errorMessage}
+            />
         </div>
     );
 }

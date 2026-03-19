@@ -36,6 +36,7 @@ export async function GET(request: Request) {
         title: true,
       },
     });
+    console.log(`[DB] Exercises list query: level=${levelParam || 'all'} category=${category || 'all'} count=${exercises.length}`);
 
     return NextResponse.json(exercises);
   } catch (error) {

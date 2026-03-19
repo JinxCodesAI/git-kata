@@ -10,7 +10,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import yaml from 'js-yaml';
-import prisma from '../lib/prisma';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 interface ExerciseSpec {
     name: string;
@@ -62,6 +64,7 @@ async function scanExercises(): Promise<void> {
                     category: spec.category,
                     timeLimit: spec.timeLimit ?? 600,
                     path: `problems/${exerciseDir}`,
+                    order: 0,
                 },
                 create: {
                     id: spec.name,

@@ -1,3 +1,7 @@
+# Development docker-compose configuration
+# Use this for local development with hot-reload
+# Run with: docker compose -f docker-compose.dev.yaml up --build
+
 services:
   db:
     image: postgres:15-alpine
@@ -6,7 +10,9 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: gitkata
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
@@ -25,11 +31,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
+      target: development
     ports:
       - "12000:3000"
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       DATABASE_URL: ${DB_URL}
       MINIMAX_API_KEY: ${MINIMAX_API_KEY}
       MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic/v1/messages}
@@ -40,12 +46,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./sessions:/app/sessions
       - ./exercises:/exercises:ro
-      # Uncomment the following line for development with hot-reload:
-      # - .:/app
+      - .:/app
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  pgdata_dev:

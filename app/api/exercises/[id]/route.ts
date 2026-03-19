@@ -29,6 +29,7 @@ export async function GET(
         timeLimit: true,
       },
     });
+    console.log(`[DB] Exercise lookup: id=${id} found=${!!exercise}`);
 
     if (!exercise) {
       return NextResponse.json(

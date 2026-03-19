@@ -411,8 +411,8 @@ Appears after submitting a solution:
 | LL-02 | System shall send verify.sh output to MiniMax API for scoring | High |
 | LL-03 | System shall receive structured evaluation (pass/fail, score, feedback) | High |
 | LL-04 | System shall display feedback to user in readable format | High |
-| LL-05 | System shall handle LLM API errors gracefully | Medium |
-| LL-06 | System shall timeout LLM requests after 30 seconds | Medium |
+| LL-05 | System shall retry LLM API up to 3 times on failure; after retry limit is exhausted, return 500 error | Medium |
+| LL-06 | Backend shall wait until LLM request completes or fails; UI shall display waiting indicator during evaluation | Medium |
 | LL-07 | verify.sh output shall be natural language text for LLM interpretation | High |
 
 ### 4.5 Leaderboard
@@ -673,48 +673,89 @@ allows for more complex, multi-step verification using git commands.
 GET /api/exercises
 Query: ?level=1&category=branch
 Response: [{ id, level, category, title, completed? }]
+Errors:
+- 500: Internal server error
 
 GET /api/exercises/[id]
 Response: { id, level, category, title, description, timeLimit }
+Errors:
+- 404: Exercise not found
+- 500: Internal server error
 ```
 
 #### Sandbox
 
 ```
 POST /api/sandbox/create
-Body: { exerciseId }
-Response: { sessionId, expiresAt }
+Body: { exerciseId, userId }
+Response: { sessionId, containerName, expiresAt, exercise: {...} }
+Errors:
+- 400: Missing exerciseId or userId
+- 404: Exercise not found
+- 404: User not found
+- 500: Failed to create sandbox
 
 POST /api/sandbox/exec
 Body: { sessionId, command }
 Response: { output, exitCode }
+Errors:
+- 400: Missing sessionId or command
+- 404: Session not found
+- 500: Internal server error
+
+Note: Commands that don't start with "git " are user input errors, not HTTP errors.
+      The API returns 200 with an error message in the output field; the frontend
+      displays this error to the user. This is correct behavior - it allows the user
+      to see "Error: Only git commands are allowed" without breaking the session.
 
 GET /api/sandbox/state/[sessionId]
 Response: { branch, staged, unstaged, recentCommits }
+Errors:
+- 404: Session not found
+- 500: Internal server error
 
 DELETE /api/sandbox/[sessionId]
 Response: { success: true }
+Errors:
+- 404: Session not found
+- 500: Failed to destroy sandbox
 ```
 
 #### Attempts
 
 ```
 POST /api/attempt
-Body: { sessionId, exerciseId, duration }
+Body: { sessionId, exerciseId, userId, duration }
 Response: { passed, score, feedback, verificationOutput }
 
 Fields:
+- sessionId: string - the session ID returned from sandbox/create
+- exerciseId: string - the exercise being attempted
+- userId: string - the user ID (must match session owner)
+- duration: number - time spent in seconds
+
+Response Fields:
 - passed: boolean - whether the solution passed evaluation
 - score: number - 0-100 score
 - feedback: string - LLM-generated feedback for the user
 - verificationOutput: string - raw output from verify.sh (for debugging/auditing)
+
+Errors:
+- 400: Missing required fields
+- 403: userId does not match session owner
+- 404: session not found or exercise not found
+- 500: evaluation failed after retry limit
 ```
 
 #### Profile
 
 ```
 GET /api/profile
+Query: ?userId=<uuid> (optional - creates anonymous if missing)
 Response: { user, stats, progressByLevel, recentAttempts }
+Errors:
+- 400: Invalid userId format
+- 500: Internal server error
 ```
 
 #### Leaderboard
@@ -722,7 +763,10 @@ Response: { user, stats, progressByLevel, recentAttempts }
 ```
 GET /api/leaderboard
 Query: ?limit=50&offset=0
-Response: [{ rank, userId, name, score, exercises, avgTime }]
+Response: { entries: [{ rank, userId, name, score, exercises, avgTime }], totalParticipants }
+Errors:
+- 400: Invalid limit or offset
+- 500: Internal server error
 ```
 
 ---
@@ -746,6 +790,7 @@ Response: [{ rank, userId, name, score, exercises, avgTime }]
 | Git commands | Whitelist git commands only, no shell injection |
 | User IDs | UUID format validation |
 | Exercise IDs | UUID format validation |
+| Session-User ownership | userId in request must match the userId who owns the session |
 
 ### 8.3 Data Protection
 
@@ -753,6 +798,54 @@ Response: [{ rank, userId, name, score, exercises, avgTime }]
 - User IDs stored in localStorage (client-side)
 - No sensitive data in database
 - LLM API key stored server-side only
+
+### 8.4 Error Handling
+
+#### MANDATORY: All Endpoints Must Handle Errors
+
+**This section applies to ALL API endpoints without exception.** Every endpoint must:
+1. Return appropriate HTTP status codes (4xx for client errors, 5xx for server errors)
+2. Return a consistent error response format: `{ error: "message" }`
+3. Frontend pages must check `response.ok` before processing response data
+
+#### Global Error Response Behavior
+
+All API endpoints shall adhere to the following error handling rules:
+
+| HTTP Status | Backend Requirement | Frontend Requirement |
+|-------------|--------------------|---------------------|
+| 4xx (Client Errors) | Return error object with status code | Display Error Modal with clear message; do NOT continue operation |
+| 5xx (Server Errors) | Return error object with status code | Display Error Modal with clear message; do NOT continue operation |
+
+#### Error Modal Requirements
+
+When any API request returns a 4xx or 5xx response:
+
+1. Frontend MUST check `response.ok` before processing response data
+2. Display an Error Modal to the user immediately
+3. The modal shall show:
+   - Clear, human-readable error message
+   - Action to dismiss (e.g., "OK" button or "Try Again")
+4. Do NOT proceed with any operation that depends on the failed request
+5. Log the error server-side for debugging
+
+#### Endpoint-Specific Error Codes
+
+All endpoints not listed below shall return appropriate 4xx/5xx codes with `{ error: "description" }` format.
+
+| Endpoint | Error Condition | HTTP Status | Error Message |
+|----------|---------------|-------------|---------------|
+| `POST /api/sandbox/create` | User does not exist | 404 | "User not found" |
+| `POST /api/sandbox/create` | Exercise not found | 404 | "Exercise not found" |
+| `POST /api/sandbox/exec` | Session not found | 404 | "Session not found" |
+| `POST /api/sandbox/exec` | Invalid command (validation) | 400 | "Invalid command" |
+| `GET /api/sandbox/state/[sessionId]` | Session not found | 404 | "Session not found" |
+| `DELETE /api/sandbox/[sessionId]` | Session not found | 404 | "Session not found" |
+| `POST /api/attempt` | Session not found | 404 | "Session not found" |
+| `POST /api/attempt` | User does not match session owner | 403 | "Unauthorized" |
+| `POST /api/attempt` | LLM evaluation fails after retries | 500 | "Evaluation failed" |
+| `GET /api/profile` | Invalid userId format | 400 | "Invalid userId" |
+| `GET /api/leaderboard` | Invalid limit/offset | 400 | "Invalid parameters" |
 
 ---
 
@@ -762,9 +855,10 @@ Response: [{ rank, userId, name, score, exercises, avgTime }]
 |--------|--------|
 | Page load time | < 2 seconds |
 | Command execution | < 500ms per command |
-| LLM evaluation | < 10 seconds |
 | Session creation | < 3 seconds |
 | Container spawn | < 2 seconds |
+
+Note: LLM evaluation time is not bounded; backend waits until the request completes or fails.
 
 ---
 

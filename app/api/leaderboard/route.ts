@@ -20,6 +20,7 @@ export async function GET(request: Request) {
         },
       },
     });
+    console.log(`[DB] Leaderboard query: totalUsers=${usersWithScores.length} limit=${limit} offset=${offset}`);
 
     const leaderboard = usersWithScores
       .map((user) => {

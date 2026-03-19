@@ -58,21 +58,45 @@ npm run scan-exercises
 
 ### Production (Docker)
 ```bash
-# Build and start all services
-docker-compose up -d --build
+# Build and start all services (production mode)
+docker compose up -d --build
 
 # View logs
-docker-compose logs -f app
+docker compose logs -f app
 
 # Stop services
-docker-compose down
+docker compose down
 ```
 
-### Running a Single Test
-This project does not have a formal test framework. To test functionality:
-1. Start the development server: `npm run dev`
-2. Manually test the feature via the browser at `http://localhost:3000`
-3. For API testing, use curl/Postman against the running server
+### Development (Docker)
+```bash
+# Build and start with hot-reload enabled
+docker compose -f docker-compose.dev.yaml up -d --build
+
+# View logs
+docker compose -f docker-compose.dev.yaml logs -f app
+
+# Stop services
+docker compose -f docker-compose.dev.yaml down
+```
+
+### Running Tests
+```bash
+# Run tests inside the development container
+docker compose -f docker-compose.dev.yaml exec app npm test
+
+# Or run tests on host machine (requires Node.js)
+npm test
+```
+
+### Running Tests
+```bash
+# Run tests inside the development container
+docker compose -f docker-compose.dev.yaml exec app npm test
+
+# Or run tests on host machine (requires Node.js)
+npm test
+```
 
 ---
 
@@ -260,8 +284,9 @@ git-kata/
 ├── sandbox/                # Sandbox Docker image
 ├── scripts/                # Utility scripts
 ├── docs/                   # Documentation
-└── docker-compose.yaml    # Container orchestration
-```
+├── docker-compose.yaml     # Production container orchestration
+├── docker-compose.dev.yaml # Development container orchestration (hot-reload)
+├── Dockerfile
 
 ---
 

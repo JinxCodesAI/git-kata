@@ -60,12 +60,13 @@ git-kata/
 ├── sandbox/
 │ └── Dockerfile
 ├── exercises/
-│ ├── problems/
-│ │ └── (exercise folders)/
-│ │ └── (each contains content/ + spec.yaml)
-│ └── solutions/
-│ └── (solution folders)/
-│ └── (each contains content/ + verify.sh)
+│   ├── problems/
+│   │ └── (exercise folders)/
+│   │ └── (each contains content/ + spec.yaml)
+│   └── solutions/
+│       └── (solution folders)/
+│           └── (each contains content/ + verify.sh)
+├── sessions/                    # User session data (git repos)
 ├── public/
 │ └── ascii-logo.txt
 ├── docs/
@@ -652,33 +653,77 @@ WORKDIR /workspace
 CMD ["sleep", "infinity"]
 ```
 
-**D-02: App Dockerfile**
+**D-02: App Dockerfile (Multi-stage)**
 ```dockerfile
+# ================================
+# Stage 1: Base dependencies
+# ================================
 FROM node:20-alpine AS base
 
-WORKDIR /app
-
+# Install runtime and development dependencies
 RUN apk add --no-cache \
     openssl \
     docker-cli \
-    bash
+    docker-cli-compose \
+    bash \
+    postgresql-client \
+    curl \
+    git
 
-COPY package.json ./
-RUN npm install
+WORKDIR /app
 
+# ================================
+# Stage 2: Dependencies
+# ================================
+FROM base AS deps
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# ================================
+# Stage 3: Build
+# ================================
+FROM base AS build
+
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 RUN npx prisma generate
 RUN npm run build
 
+# ================================
+# Stage 4: Production image
+# ================================
+FROM base AS production
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/public ./public
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/package.json ./
+
 RUN chmod +x scripts/start.sh
-
 EXPOSE 3000
+ENV NODE_ENV=production
+CMD ["./scripts/start.sh"]
 
+# ================================
+# Development target
+# ================================
+FROM base AS development
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+RUN chmod +x scripts/start.sh
+EXPOSE 3000
+ENV NODE_ENV=development
 CMD ["./scripts/start.sh"]
 ```
 
-**D-03: docker-compose.yaml**
+**D-03: docker-compose.yaml (Production)**
 ```yaml
 services:
   db:
@@ -707,6 +752,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: production
     ports:
       - "12000:3000"
     environment:
@@ -717,7 +763,7 @@ services:
       EXERCISES_PATH: /exercises
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - sessions:/sessions
+      - ./sessions:/app/sessions
       - ./exercises:/exercises:ro
     depends_on:
       db:
@@ -725,8 +771,60 @@ services:
     restart: unless-stopped
 
   volumes:
-    pgdata:
-    sessions:
+  pgdata:
+```
+
+**D-03b: docker-compose.dev.yaml (Development with hot-reload)**
+```yaml
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: gitkata
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  sandbox-base:
+    build:
+      context: ./sandbox
+      dockerfile: Dockerfile
+    image: gitkata-sandbox:latest
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "12000:3000"
+    environment:
+      DATABASE_URL: ${DB_URL}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic/v1/messages}
+      SANDBOX_IMAGE: gitkata-sandbox:latest
+      EXERCISES_PATH: /exercises
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./sessions:/app/sessions
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata_dev:
 ```
 
 **D-04: scripts/start.sh**
@@ -873,7 +971,7 @@ const CONTAINER_LIMITS = {
   pidsLimit: 64,
 };
 
-const SESSIONS_DIR = '/sessions';
+const SESSIONS_DIR = '/app/sessions';
 
 interface ExerciseSetup {
   branches: { name: string; commits: string[] }[];
@@ -1138,6 +1236,9 @@ export async function POST(request: Request) {
     sessionManager.updateActivity(sessionId);
     
     // Validate command - must start with 'git'
+    // NOTE: Returns 200 with error output, NOT 400.
+    // This is intentional - invalid commands like "ls" are user errors, not HTTP errors.
+    // The frontend displays the error message to the user.
     const trimmedCommand = command.trim();
     if (!trimmedCommand.startsWith('git ')) {
       return NextResponse.json({
@@ -1379,7 +1480,7 @@ export async function POST(request: Request) {
     
     // Run verify.sh to validate the solution
     const containerName = `gitkata-${sessionId}`;
-    const sessionDir = `/sessions/${userId}/${sessionId}`;
+    const sessionDir = `/app/sessions/${userId}/${sessionId}`;
     const solutionPath = await sandbox.getSolutionRepo(exercise.path);
     const verifyScriptPath = `${solutionPath}/../verify.sh`;
     

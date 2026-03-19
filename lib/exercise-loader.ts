@@ -13,9 +13,17 @@ const EXERCISES_PATH = process.env.EXERCISES_PATH || '/exercises';
  * @throws Error if spec.yaml is not found or cannot be parsed
  */
 export async function loadExerciseSpec(exercisePath: string): Promise<ExerciseSpec> {
-    // exercisePath is stored as "problems/init-basic-01" in DB
-    // We need to look at EXERCISES_PATH/problems/init-basic-01/spec.yaml
-    const specPath = path.join(EXERCISES_PATH, exercisePath, 'spec.yaml');
+    // exercisePath can be either just the directory name (e.g., "init-basic-01") or
+    // the full path stored in DB (e.g., "problems/init-basic-01")
+    // We need to construct the correct path to spec.yaml
+    let specPath: string;
+    if (exercisePath.includes('problems/') || exercisePath.includes('solutions/')) {
+        // exercisePath already includes the category prefix
+        specPath = path.join(EXERCISES_PATH, exercisePath, 'spec.yaml');
+    } else {
+        // exercisePath is just the directory name, prepend 'problems'
+        specPath = path.join(EXERCISES_PATH, 'problems', exercisePath, 'spec.yaml');
+    }
     
     const specContent = await fs.readFile(specPath, 'utf-8');
     const spec = yaml.load(specContent) as ExerciseSpec;
