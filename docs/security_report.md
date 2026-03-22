@@ -1,18 +1,19 @@
 # Git Kata — Security Audit Report
 
 **Date:** 2026-03-22  
+**Last updated:** 2026-03-22  
 **Scope:** Full application — Docker infrastructure, backend API, sandbox isolation, frontend  
 
 ---
 
 ## Summary
 
-| Severity | Count | Label |
-|----------|-------|-------|
-| 🔴 | 3 | Critical |
-| 🟠 | 5 | High |
-| 🟡 | 5 | Medium |
-| 🔵 | 3 | Low |
+| Severity | Total | Fixed | Remaining |
+|----------|-------|-------|-----------|
+| 🔴 Critical | 3 | 3 | 0 |
+| 🟠 High | 5 | 1 | 4 |
+| 🟡 Medium | 5 | 1 | 4 |
+| 🔵 Low | 3 | 0 | 3 |
 
 ---
 
@@ -23,7 +24,8 @@
 ### C1 — Docker Socket Mounted in App Container → Full Host Compromise
 
 **Severity:** 🔴 Critical  
-**Affected files:** `docker-compose.yaml` (line 40), `docker-compose.dev.yaml` (line 46)
+**Status:** ✅ FIXED  
+**Affected files:** `docker-compose.yaml`, `docker-compose.dev.yaml`
 
 #### Description
 
@@ -66,12 +68,17 @@ The app needs to create/destroy sandbox Docker containers. The simplest approach
 
 3. **Host-level hardening:** Enable user namespace remapping (`--userns-remap`) on the Docker daemon. Apply AppArmor/SELinux profiles to the app container.
 
+#### Resolution
+
+Deployed `tecnativa/docker-socket-proxy` as a sidecar service in both `docker-compose.yaml` and `docker-compose.dev.yaml`. The Docker socket is mounted **read-only** into the proxy only. The app container no longer has any Docker socket mount and uses `DOCKER_HOST=tcp://docker-proxy:2375`. The proxy restricts access to container and exec operations only (images, volumes, networks, services, nodes, and build are all denied).
+
 ---
 
 ### C2 — Command Injection via Shell String Interpolation
 
 **Severity:** 🔴 Critical  
-**Affected file:** `lib/sandbox.ts` (lines 39–54, 105, 202–209)
+**Status:** ✅ FIXED  
+**Affected file:** `lib/sandbox.ts`
 
 #### Description
 
@@ -132,12 +139,17 @@ The `containerName` is derived from `sessionId` which is generated server-side (
 
 4. **Create a shared validation module** (`lib/validators.ts`) used by all routes.
 
+#### Resolution
+
+All `exec()` (string-form) calls in `lib/sandbox.ts` replaced with `execFile()` (array-form) — `createContainer`, `execInContainer`, `destroyContainer`, and `execInWebApp` now use `execFileAsync('docker', [...args])` or `execFileAsync('bash', ['-c', cmd], { cwd })`. A shared `lib/validators.ts` module was created with `validateUserId()` and `validateSessionId()`, and validation is applied in all 5 API routes: `sandbox/create`, `sandbox/exec`, `sandbox/state/[sessionId]`, `sandbox/[sessionId]`, and `attempt`.
+
 ---
 
 ### C3 — Container Escape via User-Modifiable `verify.sh`
 
 **Severity:** 🔴 Critical  
-**Affected files:** `lib/sandbox.ts` (lines 57–80, 123–146), `app/api/attempt/route.ts` (lines 55–71)
+**Status:** ✅ FIXED  
+**Affected files:** `lib/sandbox.ts`, `app/api/attempt/route.ts`
 
 #### Description
 
@@ -222,6 +234,10 @@ This is **trivially exploitable**:
    ```
 
 3. **Ensure verify.sh is immutable** after copying — use `fs.chmod` to remove write permissions, and validate its checksum before execution.
+
+#### Resolution
+
+`verify.sh` is now copied to `/app/verify-scripts/{sessionId}/verify.sh` — a directory that the sandbox container cannot access (sandbox only mounts the session directory at `/workspace`). The file is also `chmod 0o444` (read-only) after copying. The attempt route reads from the isolated path via `sandbox.getVerifyScriptPath(sessionId)`. Cleanup of verify scripts happens on session deletion via `sandbox.cleanupVerifyScript(sessionId)`.
 
 ---
 
@@ -414,7 +430,8 @@ const cdCmd = `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VAL
 ### H5 — Database Port Exposed to All Interfaces in Dev Compose
 
 **Severity:** 🟠 High  
-**Affected file:** `docker-compose.dev.yaml` (lines 14–15)
+**Status:** ✅ FIXED  
+**Affected file:** `docker-compose.dev.yaml`
 
 #### Description
 
@@ -437,6 +454,10 @@ ports:
 ```
 
 Or remove the port mapping entirely if local access is not needed (the app communicates with the DB over Docker's internal network).
+
+#### Resolution
+
+Dev compose DB port binding changed from `"5432:5432"` to `"127.0.0.1:5432:5432"`.
 
 ---
 
@@ -478,10 +499,11 @@ const sessionId = `session-${randomUUID()}`;
 ### M2 — Inconsistent `userId` Validation Across API Endpoints
 
 **Severity:** 🟡 Medium  
+**Status:** ✅ FIXED (as part of C2 fix)  
 **Affected files:**
-- `app/api/profile/route.ts` (line 40) — ✅ validates format
-- `app/api/sandbox/create/route.ts` (line 10) — ❌ no validation
-- `app/api/attempt/route.ts` (line 13) — ❌ no validation
+- `app/api/profile/route.ts` — ✅ validates format
+- `app/api/sandbox/create/route.ts` — ✅ validates format
+- `app/api/attempt/route.ts` — ✅ validates format
 
 #### Description
 
@@ -517,12 +539,20 @@ export function validateUserId(userId: unknown): userId is string {
 
 Use it in every route that accepts `userId`.
 
+#### Resolution
+
+Shared `lib/validators.ts` module created with `validateUserId()` and `validateSessionId()`. Both validators are applied consistently across all API routes that accept these parameters: `sandbox/create`, `sandbox/exec`, `sandbox/state/[sessionId]`, `sandbox/[sessionId]`, and `attempt`.
+
 ---
 
 ### M3 — Git Command Validation Can Be Bypassed via Git's Built-in Capabilities
 
-**Severity:** 🟡 Medium  
+**Severity:** 🟡 Medium → 🔵 **Low** (risk reduced — see note)  
+**Status:** ⚠️ REMAINING  
 **Affected file:** `app/api/sandbox/exec/route.ts` (lines 25–50)
+
+> [!NOTE]
+> **Risk reduced by C3 fix.** The primary exploitation chain for M3 was using git subcommand tricks to modify `verify.sh`, which would then execute in the privileged app container (C3). Since C3 is now fixed (`verify.sh` is stored outside the sandbox-accessible directory), M3 can only affect the user's own sandbox container, which is isolated with `--network=none` and resource limits. The effective severity is now **Low**.
 
 #### Description
 
@@ -547,10 +577,7 @@ This blocks shell injection but does **not** account for Git's own ability to ex
 | Config alias | `git config alias.x '!cat /etc/passwd'` then `git x` | Persists a shell alias |
 | Hooks | `git config core.hooksPath /workspace/.hooks` | Triggers hooks on next git operation |
 
-Note: The sandbox has `--network=none` which limits the impact (no data exfiltration over network), but the attacker can still:
-- Read/modify files in `/workspace`
-- Exhaust resources (fork bomb via pager)
-- Modify `verify.sh` (which feeds into C3)
+Note: The sandbox has `--network=none` which limits the impact (no data exfiltration over network), and with C3 fixed, all effects are contained to the user's own sandbox container.
 
 Additionally, the pattern `\$(` is listed **twice** (duplicated), and `\` (backslash) is not blocked.
 
@@ -587,7 +614,11 @@ Additionally, the pattern `\$(` is listed **twice** (duplicated), and `\` (backs
 ### M4 — App Container Runs as Root
 
 **Severity:** 🟡 Medium  
+**Status:** ⚠️ REMAINING (risk reduced — see note)  
 **Affected file:** `Dockerfile`
+
+> [!NOTE]
+> **Risk reduced by C1 fix.** Previously, running as root combined with the Docker socket mount meant root-in-container could directly control the Docker daemon. Since C1 is now fixed (Docker socket replaced by proxy), running as root still increases the blast radius of any vulnerability but no longer enables direct host escape via Docker.
 
 #### Description
 
@@ -603,9 +634,7 @@ FROM base AS development
 CMD ["./scripts/start.sh"]
 ```
 
-The app runs as root inside the container. Combined with the Docker socket mount (C1), this means root-in-container can directly control the Docker daemon as root.
-
-Even without the Docker socket, running as root increases the blast radius of any vulnerability — the app can modify any file in the container, bind to privileged ports, and if a container escape exists, maps to root on the host.
+The app runs as root inside the container. Even without the Docker socket, running as root increases the blast radius of any vulnerability — the app can modify any file in the container, bind to privileged ports, and if a container escape exists, maps to root on the host.
 
 #### Recommendation
 
@@ -618,8 +647,6 @@ RUN adduser -D -u 1000 appuser
 USER appuser
 CMD ["./scripts/start.sh"]
 ```
-
-Note: The Docker socket may need special group permissions. This is another argument for the sidecar approach in C1.
 
 ---
 
@@ -774,26 +801,37 @@ The following security practices are already in place and should be maintained:
 | No credentials in client code | ✅ | Frontend has no access to `DATABASE_URL` or `MINIMAX_API_KEY` |
 | Prisma singleton pattern | ✅ | Prevents connection pool exhaustion |
 | Exercises mounted read-only | ✅ | `./exercises:/exercises:ro` in docker-compose |
-| Input validation on profile | ✅ | userId format validated (but needs to be consistent — see M2) |
+| Input validation consistent | ✅ | `lib/validators.ts` applied across all routes (M2 fixed) |
+| Docker socket isolated | ✅ | App uses socket proxy, no direct socket mount (C1 fixed) |
+| No shell injection in sandbox.ts | ✅ | All calls use `execFile` array form (C2 fixed) |
+| verify.sh isolated from sandbox | ✅ | Stored in `/app/verify-scripts/`, inaccessible to sandbox (C3 fixed) |
+| Dev DB bound to localhost | ✅ | Port `127.0.0.1:5432` only (H5 fixed) |
 
 ---
 
-## Recommended Remediation Priority
+## Remaining Remediation Priority
 
 | Priority | Finding | Effort | Impact |
 |----------|---------|--------|--------|
-| 1 | **C3** — verify.sh escape | Low | Eliminates the easiest full-compromise path |
-| 2 | **H1** — Ownership checks | Low | Prevents cross-user access to sandboxes |
-| 3 | **C2** — Shell injection | Medium | Eliminates command injection class entirely |
-| 4 | **H2+H3** — Sandbox hardening | Low | Defense in depth for container isolation |
-| 5 | **M2** — userId validation | Low | Consistent input validation across all routes |
-| 6 | **C1** — Docker socket proxy | High | Eliminates the root-cause privilege escalation |
-| 7 | **M3** — Git subcommand whitelist | Medium | Limits abuse of git's built-in capabilities |
-| 8 | **M1** — Crypto session IDs | Low | Prevents session ID prediction |
-| 9 | **H4** — safe.directory | Low | Restores Git's ownership security check |
-| 10 | **H5** — Dev DB port | Low | Prevents accidental DB exposure |
-| 11 | **L1** — Leaderboard user IDs | Low | Reduces information exposure |
-| 12 | **L2** — Rate limiting | Medium | Prevents resource exhaustion |
-| 13 | **L3** — Logging | Medium | Prevents sensitive data in logs |
-| 14 | **M4** — App non-root | Medium | Reduces blast radius |
-| 15 | **M5** — Host path default | Low | Prevents misconfiguration |
+| 1 | **H1** — Ownership checks | Low | Prevents cross-user access to sandboxes |
+| 2 | **H2+H3** — Sandbox hardening | Low | Defense in depth for container isolation |
+| 3 | **M1** — Crypto session IDs | Low | Prevents session ID prediction |
+| 4 | **H4** — safe.directory | Low | Restores Git's ownership security check |
+| 5 | **M3** — Git subcommand whitelist | Medium | Limits abuse within sandbox (low risk now) |
+| 6 | **L1** — Leaderboard user IDs | Low | Reduces information exposure |
+| 7 | **L2** — Rate limiting | Medium | Prevents resource exhaustion |
+| 8 | **L3** — Logging | Medium | Prevents sensitive data in logs |
+| 9 | **M4** — App non-root | Medium | Reduces blast radius (lower risk with C1 fixed) |
+| 10 | **M5** — Host path default | Low | Prevents misconfiguration |
+
+---
+
+## Resolved Findings
+
+| Finding | Fix Date | Resolution |
+|---------|----------|------------|
+| **C1** — Docker socket exposure | 2026-03-22 | Docker socket proxy sidecar deployed |
+| **C2** — Shell command injection | 2026-03-22 | `exec` → `execFile` + shared input validators |
+| **C3** — verify.sh container escape | 2026-03-22 | verify.sh isolated to `/app/verify-scripts/` |
+| **H5** — Dev DB port exposed | 2026-03-22 | Bound to `127.0.0.1` |
+| **M2** — Inconsistent userId validation | 2026-03-22 | `lib/validators.ts` applied to all routes |

@@ -1,11 +1,11 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import yaml from 'js-yaml';
 import type { ExerciseSpec } from './types';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const CONTAINER_LIMITS = {
   memory: '256m',
@@ -16,6 +16,7 @@ const CONTAINER_LIMITS = {
 };
 
 const SESSIONS_DIR = '/app/sessions';
+const VERIFY_SCRIPTS_DIR = '/app/verify-scripts';
 
 async function ensureSessionsDir(): Promise<void> {
   try {
@@ -36,18 +37,18 @@ async function createContainer(sessionId: string, userId: string): Promise<strin
   const sessionsHostPath = process.env.SESSIONS_HOST_PATH || '/sessions';
   const hostSessionDir = path.join(sessionsHostPath, userId, sessionId);
   
-  const runCmd = `docker run -d \
-    --name ${containerName} \
-    -v ${hostSessionDir}:/workspace \
-    --memory="${CONTAINER_LIMITS.memory}" \
-    --memory-reservation="${CONTAINER_LIMITS.memoryReservation}" \
-    --cpu-quota=${CONTAINER_LIMITS.cpuQuota} \
-    --cpu-shares=${CONTAINER_LIMITS.cpuShares} \
-    --pids-limit=${CONTAINER_LIMITS.pidsLimit} \
-    --network=none \
-    gitkata-sandbox:latest`;
-
-  const { stdout } = await execAsync(runCmd);
+  const { stdout } = await execFileAsync('docker', [
+    'run', '-d',
+    '--name', containerName,
+    '-v', `${hostSessionDir}:/workspace`,
+    '--memory', CONTAINER_LIMITS.memory,
+    '--memory-reservation', CONTAINER_LIMITS.memoryReservation,
+    '--cpu-quota', String(CONTAINER_LIMITS.cpuQuota),
+    '--cpu-shares', String(CONTAINER_LIMITS.cpuShares),
+    '--pids-limit', String(CONTAINER_LIMITS.pidsLimit),
+    '--network', 'none',
+    'gitkata-sandbox:latest',
+  ]);
   const containerId = stdout.trim();
   console.log(`[DOCKER] Container created: ${containerName} (${containerId})`);
   console.log(`[DOCKER] Volume mount: ${hostSessionDir}:/workspace`);
@@ -56,7 +57,8 @@ async function createContainer(sessionId: string, userId: string): Promise<strin
 
 async function copyExerciseToSession(
   exercisePath: string,
-  sessionDir: string
+  sessionDir: string,
+  sessionId: string
 ): Promise<void> {
   // exercisePath is stored as 'problems/init-basic-01'
   // We need to extract just 'init-basic-01' to avoid doubling 'problems/'
@@ -65,13 +67,17 @@ async function copyExerciseToSession(
   await fs.cp(exerciseRepoPath, sessionDir, { recursive: true });
   console.log(`[DOCKER] Exercise content copied: ${exerciseName} to ${sessionDir}`);
   
-  // Also copy verify.sh from solutions folder into session directory
-  // This is needed because verify.sh runs in web-app context (not sandbox)
-  // and needs access to the session directory
+  // Copy verify.sh to a separate directory that the sandbox cannot access.
+  // The sandbox only mounts the session directory at /workspace, so any path
+  // outside of /app/sessions/{userId}/{sessionId} is inaccessible to it.
+  const verifyDir = path.join(VERIFY_SCRIPTS_DIR, sessionId);
+  await fs.mkdir(verifyDir, { recursive: true });
   const verifyScriptSrc = path.join(process.env.EXERCISES_PATH || '/exercises', 'solutions', exerciseName, 'verify.sh');
-  const verifyScriptDst = path.join(sessionDir, 'verify.sh');
+  const verifyScriptDst = path.join(verifyDir, 'verify.sh');
   try {
     await fs.copyFile(verifyScriptSrc, verifyScriptDst);
+    // Make verify.sh read-only to prevent modification
+    await fs.chmod(verifyScriptDst, 0o444);
     console.log(`[DOCKER] verify.sh copied: ${verifyScriptSrc} -> ${verifyScriptDst}`);
   } catch (e) {
     console.error(`[DOCKER] Failed to copy verify.sh: ${e}`);
@@ -102,9 +108,10 @@ async function execInContainer(
   command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   try {
-    const dockerCmd = `docker exec -w /workspace ${containerName} sh -c "${command.replace(/"/g, '\\"')}"`;
-    console.log(`[DOCKER] Exec command: ${dockerCmd}`);
-    const { stdout, stderr } = await execAsync(dockerCmd);
+    console.log(`[DOCKER] Exec command in ${containerName}: ${command}`);
+    const { stdout, stderr } = await execFileAsync('docker', [
+      'exec', '-w', '/workspace', containerName, 'sh', '-c', command,
+    ]);
     return { stdout, stderr, exitCode: 0 };
   } catch (error: any) {
     return {
@@ -128,13 +135,12 @@ async function execInWebApp(
     // Configure git safe.directory to allow git operations on session directories
     // This is needed because session directories may be created by different users/containers
     // and git's security check prevents access to directories not owned by the current user
-    await execAsync('git config --global --add safe.directory "*" 2>/dev/null || true');
+    await execFileAsync('git', ['config', '--global', '--add', 'safe.directory', '*']);
     
-    // Escape double quotes in the command
-    const escapedCommand = command.replace(/"/g, '\\"');
-    const cdCmd = workingDir ? `cd "${workingDir}" && ${escapedCommand}` : escapedCommand;
-    console.log(`[WEBAPP] Exec command: ${cdCmd}`);
-    const { stdout, stderr } = await execAsync(cdCmd);
+    console.log(`[WEBAPP] Exec command: ${command}`);
+    const { stdout, stderr } = await execFileAsync('bash', ['-c', command], {
+      cwd: workingDir,
+    });
     return { stdout, stderr, exitCode: 0 };
   } catch (error: any) {
     return {
@@ -201,8 +207,8 @@ async function getRepoState(containerName: string): Promise<{
 
 async function destroyContainer(containerName: string): Promise<void> {
   try {
-    await execAsync(`docker kill ${containerName}`);
-    await execAsync(`docker rm ${containerName}`);
+    await execFileAsync('docker', ['kill', containerName]);
+    await execFileAsync('docker', ['rm', containerName]);
     console.log(`[DOCKER] Container destroyed: ${containerName}`);
   } catch (e) {
     // Container might not exist
@@ -214,6 +220,20 @@ async function cleanupSessionDir(sessionId: string, userId: string): Promise<voi
   try {
     await fs.rm(sessionDir, { recursive: true, force: true });
     console.log(`[DOCKER] Session directory cleaned up: ${sessionDir}`);
+  } catch (e) {
+    // Directory might not exist
+  }
+}
+
+function getVerifyScriptPath(sessionId: string): string {
+  return path.join(VERIFY_SCRIPTS_DIR, sessionId, 'verify.sh');
+}
+
+async function cleanupVerifyScript(sessionId: string): Promise<void> {
+  const verifyDir = path.join(VERIFY_SCRIPTS_DIR, sessionId);
+  try {
+    await fs.rm(verifyDir, { recursive: true, force: true });
+    console.log(`[DOCKER] Verify script directory cleaned up: ${verifyDir}`);
   } catch (e) {
     // Directory might not exist
   }
@@ -231,4 +251,6 @@ export const sandbox = {
   getRepoState,
   destroyContainer,
   cleanupSessionDir,
+  getVerifyScriptPath,
+  cleanupVerifyScript,
 };

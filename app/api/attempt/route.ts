@@ -6,6 +6,7 @@ import { sandbox } from '@/lib/sandbox';
 import { minimax } from '@/lib/minimax';
 import prisma from '@/lib/prisma';
 import { loadExerciseSpec } from '@/lib/exercise-loader';
+import { validateUserId, validateSessionId } from '@/lib/validators';
 
 export async function POST(request: Request) {
   console.log('[ATTEMPT] ===== POST /api/attempt called =====');
@@ -16,6 +17,20 @@ export async function POST(request: Request) {
     if (!sessionId || !exerciseId || !userId) {
       return NextResponse.json(
         { error: 'sessionId, exerciseId, and userId are required' },
+        { status: 400 }
+      );
+    }
+    
+    if (!validateUserId(userId)) {
+      return NextResponse.json(
+        { error: 'Invalid userId format' },
+        { status: 400 }
+      );
+    }
+    
+    if (!validateSessionId(sessionId)) {
+      return NextResponse.json(
+        { error: 'Invalid sessionId format' },
         { status: 400 }
       );
     }
@@ -56,9 +71,11 @@ export async function POST(request: Request) {
     
     let verificationOutput = '';
     try {
-      // Run verify.sh from web-app container where session dir is accessible
-      // Both USER_DIR and SOLUTION_DIR point to sessionDir since we copied problem content there
-      const verifyCommand = `bash ${sessionDir}/verify.sh ${sessionDir} ${sessionDir}`;
+      // Run verify.sh from the isolated verify-scripts directory.
+      // This directory is NOT accessible from the sandbox container,
+      // preventing users from modifying verify.sh to escape.
+      const verifyScriptPath = sandbox.getVerifyScriptPath(sessionId);
+      const verifyCommand = `bash ${verifyScriptPath} ${sessionDir} ${sessionDir}`;
       console.log('[ATTEMPT] Running verify.sh in web-app context:', verifyCommand);
       const verifyResult = await sandbox.execInWebApp(verifyCommand, sessionDir);
       verificationOutput = verifyResult.stdout + verifyResult.stderr;

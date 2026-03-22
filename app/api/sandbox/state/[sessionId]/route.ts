@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { sessionManager } from '@/lib/session-manager';
 import { sandbox } from '@/lib/sandbox';
+import { validateSessionId } from '@/lib/validators';
 
 export async function GET(
   request: Request,
@@ -10,6 +11,14 @@ export async function GET(
 ) {
   try {
     const { sessionId } = params;
+    
+    if (!validateSessionId(sessionId)) {
+      return NextResponse.json(
+        { error: 'Invalid sessionId format' },
+        { status: 400 }
+      );
+    }
+    
     const session = sessionManager.getSession(sessionId);
 
     if (!session) {

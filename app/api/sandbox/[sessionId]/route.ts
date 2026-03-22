@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { sessionManager } from '@/lib/session-manager';
 import { sandbox } from '@/lib/sandbox';
+import { validateSessionId } from '@/lib/validators';
 
 export async function DELETE(
   request: Request,
@@ -10,6 +11,14 @@ export async function DELETE(
 ) {
   try {
     const { sessionId } = params;
+    
+    if (!validateSessionId(sessionId)) {
+      return NextResponse.json(
+        { error: 'Invalid sessionId format' },
+        { status: 400 }
+      );
+    }
+    
     const session = sessionManager.getSession(sessionId);
     
     if (!session) {
@@ -18,6 +27,7 @@ export async function DELETE(
     
     await sandbox.destroyContainer(`gitkata-${sessionId}`);
     await sandbox.cleanupSessionDir(sessionId, session.userId);
+    await sandbox.cleanupVerifyScript(sessionId);
     sessionManager.destroySession(sessionId);
     
     console.log(`[SANDBOX] Session ${sessionId} deleted via API`);

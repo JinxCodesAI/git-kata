@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { sandbox } from '@/lib/sandbox';
 import { sessionManager } from '@/lib/session-manager';
 import prisma from '@/lib/prisma';
+import { validateUserId } from '@/lib/validators';
 
 export async function POST(request: Request) {
   try {
@@ -12,6 +13,13 @@ export async function POST(request: Request) {
     if (!exerciseId || !userId) {
       return NextResponse.json(
         { error: 'exerciseId and userId are required' },
+        { status: 400 }
+      );
+    }
+    
+    if (!validateUserId(userId)) {
+      return NextResponse.json(
+        { error: 'Invalid userId format' },
         { status: 400 }
       );
     }
@@ -66,7 +74,7 @@ export async function POST(request: Request) {
     
     // Copy exercise content to session directory
     const sessionDir = `/app/sessions/${userId}/${sessionId}`;
-    await sandbox.copyExerciseToSession(exercise.path, sessionDir);
+    await sandbox.copyExerciseToSession(exercise.path, sessionDir, sessionId);
     
     const session = sessionManager.createSession(userId, exerciseId, containerId, sessionId);
     

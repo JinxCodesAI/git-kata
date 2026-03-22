@@ -14,6 +14,22 @@ services:
       timeout: 5s
       retries: 5
 
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      CONTAINERS: 1
+      POST: 1
+      EXEC: 1
+      IMAGES: 0
+      VOLUMES: 0
+      NETWORKS: 0
+      SERVICES: 0
+      NODES: 0
+      BUILD: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
   sandbox-base:
     build:
       context: ./sandbox
@@ -36,8 +52,8 @@ services:
       SANDBOX_IMAGE: gitkata-sandbox:latest
       EXERCISES_PATH: /exercises
       SESSIONS_HOST_PATH: ${SESSIONS_HOST_PATH:-/home/adam/projects/git-kata/sessions}
+      DOCKER_HOST: tcp://docker-proxy:2375
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./sessions:/app/sessions
       - ./exercises:/exercises:ro
       # Uncomment the following line for development with hot-reload:
@@ -45,6 +61,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      docker-proxy:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

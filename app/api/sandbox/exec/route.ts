@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { sandbox } from '@/lib/sandbox';
 import { sessionManager } from '@/lib/session-manager';
+import { validateSessionId } from '@/lib/validators';
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +12,13 @@ export async function POST(request: Request) {
     if (!sessionId || !command) {
       return NextResponse.json(
         { error: 'sessionId and command are required' },
+        { status: 400 }
+      );
+    }
+    
+    if (!validateSessionId(sessionId)) {
+      return NextResponse.json(
+        { error: 'Invalid sessionId format' },
         { status: 400 }
       );
     }
