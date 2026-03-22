@@ -1,6 +1,7 @@
 // app/api/sandbox/create/route.ts
 
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { sandbox } from '@/lib/sandbox';
 import { sessionManager } from '@/lib/session-manager';
 import prisma from '@/lib/prisma';
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
     
     await sandbox.ensureSessionsDir();
     
-    const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const sessionId = `session-${randomUUID()}`;
     const containerName = `gitkata-${sessionId}`;
     
     // Create the container

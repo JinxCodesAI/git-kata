@@ -47,6 +47,8 @@ async function createContainer(sessionId: string, userId: string): Promise<strin
     '--cpu-shares', String(CONTAINER_LIMITS.cpuShares),
     '--pids-limit', String(CONTAINER_LIMITS.pidsLimit),
     '--network', 'none',
+    '--cap-drop', 'ALL',
+    '--security-opt', 'no-new-privileges',
     'gitkata-sandbox:latest',
   ]);
   const containerId = stdout.trim();
@@ -66,7 +68,11 @@ async function copyExerciseToSession(
   const exerciseRepoPath = path.join(process.env.EXERCISES_PATH || '/exercises', 'problems', exerciseName, 'content');
   await fs.cp(exerciseRepoPath, sessionDir, { recursive: true });
   console.log(`[DOCKER] Exercise content copied: ${exerciseName} to ${sessionDir}`);
-  
+
+  // Fix ownership for sandbox non-root user (kata, uid 1000).
+  // This must happen AFTER fs.cp since cp runs as root and would reset ownership.
+  await execFileAsync('chown', ['-R', '1000:1000', sessionDir]);
+
   // Copy verify.sh to a separate directory that the sandbox cannot access.
   // The sandbox only mounts the session directory at /workspace, so any path
   // outside of /app/sessions/{userId}/{sessionId} is inaccessible to it.
@@ -132,14 +138,15 @@ async function execInWebApp(
   workingDir?: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   try {
-    // Configure git safe.directory to allow git operations on session directories
-    // This is needed because session directories may be created by different users/containers
-    // and git's security check prevents access to directories not owned by the current user
-    await execFileAsync('git', ['config', '--global', '--add', 'safe.directory', '*']);
-    
     console.log(`[WEBAPP] Exec command: ${command}`);
     const { stdout, stderr } = await execFileAsync('bash', ['-c', command], {
       cwd: workingDir,
+      env: {
+        ...process.env,
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'safe.directory',
+        GIT_CONFIG_VALUE_0: workingDir || '*',
+      },
     });
     return { stdout, stderr, exitCode: 0 };
   } catch (error: any) {

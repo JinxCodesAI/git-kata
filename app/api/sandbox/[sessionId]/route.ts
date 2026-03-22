@@ -11,6 +11,7 @@ export async function DELETE(
 ) {
   try {
     const { sessionId } = params;
+    const userId = new URL(request.url).searchParams.get('userId');
     
     if (!validateSessionId(sessionId)) {
       return NextResponse.json(
@@ -23,6 +24,10 @@ export async function DELETE(
     
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    }
+    
+    if (session.userId !== userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
     
     await sandbox.destroyContainer(`gitkata-${sessionId}`);

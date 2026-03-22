@@ -138,7 +138,7 @@ export default function ChallengePage() {
                 startTimeRef.current = Date.now();
 
                 // Get initial branch
-                const stateRes = await fetch(`/api/sandbox/state/${sessionData.sessionId}`, {
+                const stateRes = await fetch(`/api/sandbox/state/${sessionData.sessionId}?userId=${userId}`, {
                     signal: abortController.signal,
                 });
                 if (abortController.signal.aborted) return;
@@ -208,11 +208,12 @@ export default function ChallengePage() {
     const executeCommand = async (command: string) => {
         if (!session) return;
 
+        const userId = localStorage.getItem('gitkata_user_id');
         try {
             const res = await fetch('/api/sandbox/exec', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId: session.sessionId, command }),
+                body: JSON.stringify({ sessionId: session.sessionId, command, userId }),
             });
 
             const data = await res.json();
@@ -237,7 +238,8 @@ export default function ChallengePage() {
                     setCurrentBranch(branchMatch[1]);
                 }
                 // Also try to refetch branch
-                const stateRes = await fetch(`/api/sandbox/state/${session.sessionId}`);
+                const userId = localStorage.getItem('gitkata_user_id');
+                const stateRes = await fetch(`/api/sandbox/state/${session.sessionId}?userId=${userId}`);
                 if (stateRes.ok) {
                     const stateData = await stateRes.json();
                     setCurrentBranch(stateData.branch);
@@ -323,8 +325,9 @@ export default function ChallengePage() {
         if (!session || !exercise) return;
 
         try {
+            const userId = localStorage.getItem('gitkata_user_id');
             // Destroy current session
-            const deleteRes = await fetch(`/api/sandbox/${session.sessionId}`, { method: 'DELETE' });
+            const deleteRes = await fetch(`/api/sandbox/${session.sessionId}?userId=${userId}`, { method: 'DELETE' });
 
             if (!deleteRes.ok) {
                 const errorData = await deleteRes.json().catch(() => ({}));
@@ -334,7 +337,6 @@ export default function ChallengePage() {
             }
 
             // Create new session
-            const userId = localStorage.getItem('gitkata_user_id');
             const sandboxRes = await fetch('/api/sandbox/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -352,7 +354,7 @@ export default function ChallengePage() {
             startTimeRef.current = Date.now();
 
             // Get initial branch
-            const stateRes = await fetch(`/api/sandbox/state/${sessionData.sessionId}`);
+            const stateRes = await fetch(`/api/sandbox/state/${sessionData.sessionId}?userId=${userId}`);
             if (stateRes.ok) {
                 const stateData = await stateRes.json();
                 setCurrentBranch(stateData.branch);

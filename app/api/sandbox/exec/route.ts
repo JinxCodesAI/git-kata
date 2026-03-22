@@ -7,7 +7,7 @@ import { validateSessionId } from '@/lib/validators';
 
 export async function POST(request: Request) {
   try {
-    const { sessionId, command } = await request.json();
+    const { sessionId, command, userId } = await request.json();
     
     if (!sessionId || !command) {
       return NextResponse.json(
@@ -26,6 +26,10 @@ export async function POST(request: Request) {
     const session = sessionManager.getSession(sessionId);
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    }
+    
+    if (session.userId !== userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
     
     sessionManager.updateActivity(sessionId);
