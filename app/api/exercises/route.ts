@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
   try {
@@ -36,11 +37,11 @@ export async function GET(request: Request) {
         title: true,
       },
     });
-    console.log(`[DB] Exercises list query: level=${levelParam || 'all'} category=${category || 'all'} count=${exercises.length}`);
+    logger.debug('Exercises list query:', 'level=', levelParam || 'all', 'category=', category || 'all', 'count=', exercises.length);
 
     return NextResponse.json(exercises);
   } catch (error) {
-    console.error('Error fetching exercises:', error);
+    logger.error('Error fetching exercises:', error);
     return NextResponse.json(
       { error: 'Internal Server Error' },
       { status: 500 }

@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { loadExerciseSpec } from '@/lib/exercise-loader';
+import { logger } from '@/lib/logger';
 
 export async function GET(
   request: Request,
@@ -29,7 +30,7 @@ export async function GET(
         timeLimit: true,
       },
     });
-    console.log(`[DB] Exercise lookup: id=${id} found=${!!exercise}`);
+    logger.debug('Exercise lookup:', 'id=', id, 'found=', !!exercise);
 
     if (!exercise) {
       return NextResponse.json(
@@ -44,7 +45,7 @@ export async function GET(
       const spec = await loadExerciseSpec(exercise.path);
       description = spec.description;
     } catch (error) {
-      console.error(`Error loading spec for exercise ${exercise.path}:`, error);
+      logger.error('Error loading spec for exercise:', exercise.path, error);
     }
 
     return NextResponse.json({
@@ -52,7 +53,7 @@ export async function GET(
       description,
     });
   } catch (error) {
-    console.error('Error fetching exercise:', error);
+    logger.error('Error fetching exercise:', error);
     return NextResponse.json(
       { error: 'Internal Server Error' },
       { status: 500 }

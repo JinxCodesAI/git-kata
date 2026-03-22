@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { logger } from '@/lib/logger';
 
 interface ProgressByLevel {
   level: number;
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
-    console.log(`[DB] User lookup: userId=${userId} found=${!!user}`);
+    logger.debug('User lookup:', 'userId=', userId, 'found=', !!user);
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -67,7 +68,7 @@ export async function GET(request: Request) {
       where: { userId: user.id },
       include: { exercise: true },
     });
-    console.log(`[DB] Scores lookup: userId=${user.id} count=${completedScores.length}`);
+    logger.debug('Scores lookup:', 'userId=', user.id, 'count=', completedScores.length);
 
     // Calculate progress by level
     const progressByLevelMap: Record<number, { completed: number; total: number }> = {};
@@ -150,7 +151,7 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' },
       take: 10,
     });
-    console.log(`[DB] Recent attempts lookup: userId=${user.id} count=${recentAttemptsRaw.length}`);
+    logger.debug('Recent attempts lookup:', 'userId=', user.id, 'count=', recentAttemptsRaw.length);
 
     const recentAttempts: RecentAttempt[] = recentAttemptsRaw.map((a) => ({
       id: a.id,
@@ -173,7 +174,7 @@ export async function GET(request: Request) {
       recentAttempts,
     });
   } catch (error) {
-    console.error('Error fetching profile:', error);
+    logger.error('Error fetching profile:', error);
     return NextResponse.json(
       { error: 'Failed to fetch profile' },
       { status: 500 }

@@ -2,9 +2,21 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
   try {
+    // Rate limit by IP address
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+    const { allowed, retryAfterMs } = checkRateLimit(`leaderboard:${ip}`, RATE_LIMITS.leaderboard.maxRequests, RATE_LIMITS.leaderboard.windowMs);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(retryAfterMs / 1000)) } }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
@@ -20,7 +32,7 @@ export async function GET(request: Request) {
         },
       },
     });
-    console.log(`[DB] Leaderboard query: totalUsers=${usersWithScores.length} limit=${limit} offset=${offset}`);
+    logger.debug('Leaderboard query:', 'totalUsers=', usersWithScores.length, 'limit=', limit, 'offset=', offset);
 
     // Get total exercise count for the totalExercises field
     const totalExercises = await prisma.exercise.count();
@@ -36,7 +48,6 @@ export async function GET(request: Request) {
             : 0;
 
         return {
-          userId: user.id,
           userName: user.name,
           score: totalScore,
           exercisesCompleted,
@@ -61,7 +72,7 @@ export async function GET(request: Request) {
       offset,
     });
   } catch (error) {
-    console.error('Error fetching leaderboard:', error);
+    logger.error('Error fetching leaderboard:', error);
     return NextResponse.json(
       { error: 'Failed to fetch leaderboard' },
       { status: 500 }

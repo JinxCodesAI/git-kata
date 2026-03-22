@@ -51,8 +51,11 @@ services:
       MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic/v1/messages}
       SANDBOX_IMAGE: gitkata-sandbox:latest
       EXERCISES_PATH: /exercises
-      SESSIONS_HOST_PATH: ${SESSIONS_HOST_PATH:-/home/adam/projects/git-kata/sessions}
+      SESSIONS_HOST_PATH: ${SESSIONS_HOST_PATH:?SESSIONS_HOST_PATH must be set in .env}
       DOCKER_HOST: tcp://docker-proxy:2375
+      LOG_LEVEL: info
+      MAX_ACTIVE_SESSIONS: ${MAX_ACTIVE_SESSIONS:-20}
+      POOL_SIZE: ${POOL_SIZE:-5}
     volumes:
       - ./sessions:/app/sessions
       - ./exercises:/exercises:ro

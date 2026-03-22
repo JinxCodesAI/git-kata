@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 import { sessionManager } from '@/lib/session-manager';
 import { sandbox } from '@/lib/sandbox';
 import { validateSessionId } from '@/lib/validators';
+import { logger } from '@/lib/logger';
+import '@/lib/startup'; // Ensure pool is initialized
 
 export async function DELETE(
   request: Request,
@@ -12,34 +14,34 @@ export async function DELETE(
   try {
     const { sessionId } = params;
     const userId = new URL(request.url).searchParams.get('userId');
-    
+
     if (!validateSessionId(sessionId)) {
       return NextResponse.json(
         { error: 'Invalid sessionId format' },
         { status: 400 }
       );
     }
-    
+
     const session = sessionManager.getSession(sessionId);
-    
+
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
-    
+
     if (session.userId !== userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
-    
-    await sandbox.destroyContainer(`gitkata-${sessionId}`);
-    await sandbox.cleanupSessionDir(sessionId, session.userId);
+
+    // Cleanup session directory (container is released back to pool by destroySession)
+    await sandbox.cleanupSessionDir(sessionId, session.containerName);
     await sandbox.cleanupVerifyScript(sessionId);
-    sessionManager.destroySession(sessionId);
-    
-    console.log(`[SANDBOX] Session ${sessionId} deleted via API`);
-    
+    await sessionManager.destroySession(sessionId);
+
+    logger.info('Session deleted via API:', sessionId);
+
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error destroying session:', error);
+    logger.error('Error destroying session:', error);
     return NextResponse.json(
       { error: 'Failed to destroy session' },
       { status: 500 }

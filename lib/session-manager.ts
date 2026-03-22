@@ -1,12 +1,14 @@
 // lib/session-manager.ts
 
 import { sandbox } from './sandbox';
+import { containerPool } from './container-pool';
+import { logger } from './logger';
 
 interface Session {
   id: string;
   userId: string;
   exerciseId: string;
-  containerId: string;
+  containerName: string;
   createdAt: Date;
   lastActivity: Date;
   commands: { command: string; output: string; timestamp: Date }[];
@@ -16,18 +18,18 @@ const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 const sessions = new Map<string, Session>();
 const cleanupInterval = setInterval(cleanupSessions, 60 * 1000);
 
-function createSession(userId: string, exerciseId: string, containerId: string, sessionId: string): Session {
+function createSession(userId: string, exerciseId: string, containerName: string, sessionId: string): Session {
   const session: Session = {
     id: sessionId,
     userId,
     exerciseId,
-    containerId,
+    containerName,
     createdAt: new Date(),
     lastActivity: new Date(),
     commands: [],
   };
   sessions.set(session.id, session);
-  console.log(`[SESSION] Created session ${sessionId} for user ${userId} exercise ${exerciseId} container ${containerId}`);
+  logger.info('Created session:', sessionId, 'for user:', userId, 'exercise:', exerciseId);
   return session;
 }
 
@@ -68,9 +70,9 @@ function addCommand(sessionId: string, command: string, output: string): void {
 async function destroySession(sessionId: string): Promise<void> {
   const session = sessions.get(sessionId);
   if (session) {
-    await sandbox.destroyContainer(session.containerId);
+    await containerPool.release(sessionId);
     sessions.delete(sessionId);
-    console.log(`[SESSION] Destroyed session ${sessionId} container ${session.containerId}`);
+    logger.info('Destroyed session:', sessionId);
   }
 }
 
@@ -89,7 +91,7 @@ async function cleanupSessions(): Promise<void> {
   const now = Date.now();
   for (const [id, session] of sessions.entries()) {
     if (now - session.lastActivity.getTime() > SESSION_TIMEOUT_MS) {
-      console.log(`[SESSION] Timeout cleanup removing session ${id} for user ${session.userId}`);
+      logger.info('Timeout cleanup removing session:', id, 'for user:', session.userId);
       await destroySession(id);
     }
   }

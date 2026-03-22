@@ -4,37 +4,48 @@ import { NextResponse } from 'next/server';
 import { sessionManager } from '@/lib/session-manager';
 import { sandbox } from '@/lib/sandbox';
 import { minimax } from '@/lib/minimax';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import prisma from '@/lib/prisma';
 import { loadExerciseSpec } from '@/lib/exercise-loader';
 import { validateUserId, validateSessionId } from '@/lib/validators';
+import { logger } from '@/lib/logger';
 
 export async function POST(request: Request) {
-  console.log('[ATTEMPT] ===== POST /api/attempt called =====');
+  logger.debug('POST /api/attempt called');
   try {
     const { sessionId, exerciseId, userId, duration } = await request.json();
-    console.log('[ATTEMPT] Request body:', { sessionId, exerciseId, userId, duration });
-    
+    logger.debug('Request body:', { sessionId, exerciseId, userId, duration });
+
     if (!sessionId || !exerciseId || !userId) {
       return NextResponse.json(
         { error: 'sessionId, exerciseId, and userId are required' },
         { status: 400 }
       );
     }
-    
+
     if (!validateUserId(userId)) {
       return NextResponse.json(
         { error: 'Invalid userId format' },
         { status: 400 }
       );
     }
-    
+
     if (!validateSessionId(sessionId)) {
       return NextResponse.json(
         { error: 'Invalid sessionId format' },
         { status: 400 }
       );
     }
-    
+
+    // Check rate limit
+    const { allowed, retryAfterMs } = checkRateLimit(`attempt:${userId}`, RATE_LIMITS.attempt.maxRequests, RATE_LIMITS.attempt.windowMs);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(retryAfterMs / 1000)) } }
+      );
+    }
+
     const session = sessionManager.getSession(sessionId);
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
@@ -47,28 +58,29 @@ export async function POST(request: Request) {
     const exercise = await prisma.exercise.findUnique({
       where: { id: exerciseId },
     });
-    console.log(`[DB] Exercise lookup: ${exerciseId} found=${!!exercise}`);
-    
+    logger.debug('Exercise lookup:', exerciseId, 'found=', !!exercise);
+
     if (!exercise) {
       return NextResponse.json({ error: 'Exercise not found' }, { status: 404 });
     }
-    
+
     // Load description from spec.yaml
     let exerciseDescription = '';
     try {
       const spec = await loadExerciseSpec(exercise.path);
       exerciseDescription = spec.description;
     } catch (error) {
-      console.error(`[ATTEMPT] Error loading spec for exercise ${exercise.path}:`, error);
+      logger.error('Error loading spec for exercise:', exercise.path, error);
     }
-    
+
     // Get user commands
     const commands = session.commands.map((c) => c.command);
-    
+
     // Run verify.sh to validate the solution
     // verify.sh runs in web-app context (not sandbox) because session dir is mounted there
-    const sessionDir = `/app/sessions/${userId}/${sessionId}`;
-    
+    // Pool-based path: /app/sessions/.pool/${containerName}
+    const sessionDir = `/app/sessions/.pool/${session.containerName}`;
+
     let verificationOutput = '';
     try {
       // Run verify.sh from the isolated verify-scripts directory.
@@ -76,28 +88,26 @@ export async function POST(request: Request) {
       // preventing users from modifying verify.sh to escape.
       const verifyScriptPath = sandbox.getVerifyScriptPath(sessionId);
       const verifyCommand = `bash ${verifyScriptPath} ${sessionDir} ${sessionDir}`;
-      console.log('[ATTEMPT] Running verify.sh in web-app context:', verifyCommand);
+      logger.debug('Running verify.sh in web-app context:', verifyCommand);
       const verifyResult = await sandbox.execInWebApp(verifyCommand, sessionDir);
       verificationOutput = verifyResult.stdout + verifyResult.stderr;
-      console.log('[ATTEMPT] verify.sh stdout:', verifyResult.stdout);
-      console.log('[ATTEMPT] verify.sh stderr:', verifyResult.stderr);
-      console.log('[ATTEMPT] verify.sh exitCode:', verifyResult.exitCode);
+      logger.debug('verify.sh completed, exitCode:', verifyResult.exitCode);
     } catch (e) {
       verificationOutput = 'Error running verification script: ' + String(e);
-      console.error('[ATTEMPT] verify.sh error:', e);
+      logger.error('verify.sh error:', e);
     }
-    console.log('[ATTEMPT] Final verificationOutput:', verificationOutput);
-    
+    logger.debug('Final verificationOutput length:', verificationOutput.length);
+
     // Evaluate with LLM using verification output
-    console.log('[ATTEMPT] Calling minimax.evaluateAttempt...');
+    logger.debug('Calling minimax.evaluateAttempt...');
     const evaluation = await minimax.evaluateAttempt({
       exerciseTitle: exercise.title,
       exerciseDescription: exerciseDescription,
       userCommands: commands,
       verificationOutput,
     });
-    console.log('[ATTEMPT] LLM evaluation result:', evaluation);
-    
+    logger.debug('LLM evaluation result:', evaluation);
+
     // Save attempt
     const attempt = await prisma.attempt.create({
       data: {
@@ -111,8 +121,8 @@ export async function POST(request: Request) {
         duration,
       },
     });
-    console.log(`[DB] Attempt created: user=${userId} exercise=${exerciseId} passed=${evaluation.passed} score=${evaluation.score} attemptId=${attempt.id}`);
-    
+    logger.info('Attempt created:', 'user=', userId, 'exercise=', exerciseId, 'passed=', evaluation.passed, 'score=', evaluation.score);
+
     // Update score if this is a new best
     if (evaluation.passed) {
       const existingScore = await prisma.score.findUnique({
@@ -120,8 +130,8 @@ export async function POST(request: Request) {
           userId_exerciseId: { userId, exerciseId },
         },
       });
-      console.log(`[DB] Score lookup: user=${userId} exercise=${exerciseId} existingScore=${existingScore?.bestScore || 'none'}`);
-      
+      logger.debug('Score lookup:', 'user=', userId, 'exercise=', exerciseId, 'existingScore=', existingScore?.bestScore || 'none');
+
       const score = await prisma.score.upsert({
         where: {
           userId_exerciseId: {
@@ -145,15 +155,15 @@ export async function POST(request: Request) {
           bestTime: duration,
         },
       });
-      console.log(`[DB] Score upserted: user=${userId} exercise=${exerciseId} bestScore=${score.bestScore} completions=${score.completions}`);
+      logger.info('Score upserted:', 'user=', userId, 'exercise=', exerciseId, 'bestScore=', score.bestScore);
     }
-    
+
     return NextResponse.json({
       ...evaluation,
       verificationOutput,
     });
   } catch (error) {
-    console.error('Error processing attempt:', error);
+    logger.error('Error processing attempt:', error);
     return NextResponse.json(
       { error: 'Failed to process attempt' },
       { status: 500 }

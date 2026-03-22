@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 interface LeaderboardEntry {
   rank: number;
-  userId: string;
   userName: string;
   score: number;
   exercisesCompleted: number;
@@ -102,7 +101,7 @@ export default async function LeaderboardPage() {
                   <tbody>
                     {data.entries.map((entry) => (
                       <tr
-                        key={entry.userId}
+                        key={entry.rank}
                         className={entry.isCurrentUser ? 'current-user' : undefined}
                       >
                         <td style={{ color: entry.rank <= 3 ? 'var(--text-primary)' : 'var(--text-dim)' }}>

@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import type { ExerciseSpec } from './types';
+import { logger } from './logger';
 
 const EXERCISES_PATH = process.env.EXERCISES_PATH || '/exercises';
 
@@ -60,10 +61,10 @@ export async function loadAllExercises(): Promise<ExerciseSpec[]> {
         try {
             const spec = await loadExerciseSpec(exercisePath);
             exercises.push(spec);
-        } catch (error) {
-            console.error(`Error loading exercise ${exercisePath}:`, error);
+} catch (error) {
+            logger.error('Error loading exercise:', exercisePath, error);
             // Skip exercises that fail to load
-        }
+          }
     }
     
     return exercises;
