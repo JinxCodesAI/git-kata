@@ -14,6 +14,22 @@ services:
       timeout: 5s
       retries: 5
 
+  git-server:
+    build:
+      context: ./git-server
+      dockerfile: Dockerfile
+    image: gitkata-git-server:latest
+    # Use host network so sandboxes can access via host.docker.internal:9418
+    network_mode: host
+    volumes:
+      - git-repos:/repos
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x git || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   docker-proxy:
     image: tecnativa/docker-socket-proxy:latest
     environment:
@@ -70,3 +86,4 @@ services:
 
 volumes:
   pgdata:
+  git-repos:

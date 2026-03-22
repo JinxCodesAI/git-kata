@@ -45,11 +45,14 @@ export async function POST(request: Request) {
 
     sessionManager.updateActivity(sessionId);
 
-    // Validate command - must start with 'git'
+    // Validate command - must start with 'git' or allowed file creation commands
     const trimmedCommand = command.trim();
-    if (!trimmedCommand.startsWith('git ')) {
+    const allowedPrefixes = ['git ', 'echo ', 'printf ', 'tee ', 'touch ', 'cat '];
+    const startsWithAllowedPrefix = allowedPrefixes.some(prefix => trimmedCommand.startsWith(prefix));
+    
+    if (!startsWithAllowedPrefix) {
       return NextResponse.json({
-        output: 'Error: Only git commands are allowed. Commands must start with "git"',
+        output: 'Error: Only git commands or file creation commands (echo, printf, tee, touch, cat) are allowed.',
         exitCode: 1,
       });
     }

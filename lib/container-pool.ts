@@ -37,7 +37,7 @@ async function createBlankContainer(): Promise<PooledContainer> {
     '--cpu-quota', '50000',
     '--cpu-shares', '512',
     '--pids-limit', '64',
-    '--network', 'none',
+    '--network', 'host',
     '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges',
     process.env.SANDBOX_IMAGE || 'gitkata-sandbox:latest',

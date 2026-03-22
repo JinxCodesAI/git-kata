@@ -218,6 +218,54 @@ async function cleanupVerifyScript(sessionId: string): Promise<void> {
   }
 }
 
+// Git server configuration for remote exercises
+const GIT_SERVER_HOST = process.env.GIT_SERVER_HOST || 'host.docker.internal';
+const GIT_SERVER_PORT = process.env.GIT_SERVER_PORT || '9418';
+
+/**
+ * Create a bare repository on the git server.
+ * This is called when setting up a remote exercise.
+ */
+async function createBareRepo(repoName: string): Promise<void> {
+  const repoPath = `/repos/${repoName}.git`;
+  await execInWebApp(`mkdir -p /repos && git init --bare ${repoPath}`);
+  logger.info('Created bare repo on git server:', repoPath);
+}
+
+/**
+ * Get the git URL for a repository on the git server.
+ */
+function getGitUrl(repoName: string): string {
+  return `git://${GIT_SERVER_HOST}:${GIT_SERVER_PORT}/${repoName}.git`;
+}
+
+/**
+ * Clone a repository from the git server to the user's workspace.
+ * Used in exercises where user starts with a cloned repo.
+ */
+async function cloneFromGitServer(
+  containerName: string,
+  repoName: string
+): Promise<void> {
+  const gitUrl = getGitUrl(repoName);
+  await execInContainer(containerName, `git clone ${gitUrl} /workspace`);
+  logger.info('Cloned repo from git server:', gitUrl);
+}
+
+/**
+ * Add a remote pointing to the git server.
+ * Used when setting up exercise context.
+ */
+async function addRemoteToContainer(
+  containerName: string,
+  repoName: string,
+  remoteName: string = 'origin'
+): Promise<void> {
+  const gitUrl = getGitUrl(repoName);
+  await execInContainer(containerName, `git remote add ${remoteName} ${gitUrl}`);
+  logger.info('Added remote to container:', remoteName, gitUrl);
+}
+
 export const sandbox = {
   ensureSessionsDir,
   copyExerciseToSession,
@@ -230,4 +278,8 @@ export const sandbox = {
   cleanupSessionDir,
   getVerifyScriptPath,
   cleanupVerifyScript,
+  createBareRepo,
+  getGitUrl,
+  cloneFromGitServer,
+  addRemoteToContainer,
 };

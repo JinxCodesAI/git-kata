@@ -16,4 +16,5 @@ RUN git config --global user.email "kata@git.local" \
 
 WORKDIR /workspace
 
+# Keep container running
 CMD ["sleep", "infinity"]
