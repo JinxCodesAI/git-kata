@@ -30,13 +30,16 @@ async function ensureSessionsDir(): Promise<void> {
 // createContainer and destroyContainer are now handled by lib/container-pool.ts
 
 // sessionDir is now computed as: ${SESSIONS_HOST_PATH}/.pool/${containerName}
+// BUT fs.cp runs inside the container, so we need to use the container path
+// Sessions are mounted at /app/sessions inside the container (from ./sessions:/app/sessions)
 async function copyExerciseToSession(
   exercisePath: string,
   containerName: string,
   sessionId: string
 ): Promise<void> {
-  const sessionsHostPath = process.env.SESSIONS_HOST_PATH || '/sessions';
-  const sessionDir = path.join(sessionsHostPath, '.pool', containerName);
+  // Use container path for fs.cp since it runs inside the container
+  const sessionsContainerPath = '/app/sessions';
+  const sessionDir = path.join(sessionsContainerPath, '.pool', containerName);
 
   // exercisePath is stored as 'problems/init-basic-01'
   // We need to extract just 'init-basic-01' to avoid doubling 'problems/'
@@ -189,9 +192,10 @@ async function getRepoState(containerName: string): Promise<{
 }
 
 // Cleanup the pool-based session directory (called after container is released)
+// Uses container path since fs.rm runs inside the container
 async function cleanupSessionDir(sessionId: string, containerName: string): Promise<void> {
-  const sessionsHostPath = process.env.SESSIONS_HOST_PATH || '/sessions';
-  const sessionDir = path.join(sessionsHostPath, '.pool', containerName);
+  const sessionsContainerPath = '/app/sessions';
+  const sessionDir = path.join(sessionsContainerPath, '.pool', containerName);
   try {
     await fs.rm(sessionDir, { recursive: true, force: true });
     logger.info('Session directory cleaned up:', sessionDir);
