@@ -125,6 +125,11 @@ async function execInWebApp(
   workingDir?: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   try {
+    // Configure git safe.directory to allow git operations on session directories
+    // This is needed because session directories may be created by different users/containers
+    // and git's security check prevents access to directories not owned by the current user
+    await execAsync('git config --global --add safe.directory "*" 2>/dev/null || true');
+    
     // Escape double quotes in the command
     const escapedCommand = command.replace(/"/g, '\\"');
     const cdCmd = workingDir ? `cd "${workingDir}" && ${escapedCommand}` : escapedCommand;

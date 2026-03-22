@@ -1,12 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
 interface FeedbackModalProps {
     isOpen: boolean;
     onClose: () => void;
     score: number;
     feedback: string;
+    exerciseId: string;
     onTryAgain: () => void;
     onNextExercise: () => void;
 }
@@ -29,24 +30,70 @@ const FAIL_ASCII = `
    ╚═╝    ╚═════╝  ╚═════╝
 `;
 
+const SOLUTION_ASCII = `
+███████╗███████╗ █████╗ ██████╗ 
+██╔════╝██╔════╝██╔══██╗██╔══██╗
+█████╗  ███████╗███████║██║  ██║
+██╔══╝  ╚════██║██╔══██║██║  ██║
+███████╗███████║██║  ██║██████╔╝
+╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ 
+`;
+
 export default function FeedbackModal({
     isOpen,
     onClose,
     score,
     feedback,
+    exerciseId,
     onTryAgain,
     onNextExercise,
 }: FeedbackModalProps) {
+    const [viewSolution, setViewSolution] = useState(false);
+    const [loadingSolution, setLoadingSolution] = useState(false);
+    const [solutionHint, setSolutionHint] = useState<string>('');
+
     if (!isOpen) return null;
 
     const isPass = score >= 70;
-    const asciiArt = isPass ? PASS_ASCII : FAIL_ASCII;
+    const asciiArt = viewSolution ? SOLUTION_ASCII : (isPass ? PASS_ASCII : FAIL_ASCII);
+
+    const handleViewSolution = async () => {
+        if (solutionHint) {
+            // Already loaded, just show it
+            setViewSolution(true);
+            return;
+        }
+
+        setLoadingSolution(true);
+        try {
+            const res = await fetch(`/api/exercises/${exerciseId}/solution`);
+            if (res.ok) {
+                const data = await res.json();
+                setSolutionHint(data.hint || 'No hint available for this exercise.');
+                setViewSolution(true);
+            } else {
+                setSolutionHint('Failed to load solution hint.');
+                setViewSolution(true);
+            }
+        } catch (error) {
+            setSolutionHint('Failed to load solution hint.');
+            setViewSolution(true);
+        } finally {
+            setLoadingSolution(false);
+        }
+    };
+
+    const handleTryAgain = () => {
+        setViewSolution(false);
+        setSolutionHint('');
+        onTryAgain();
+    };
 
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
-                    <span>EVALUATION RESULT</span>
+                    <span>{viewSolution ? 'SOLUTION HINT' : 'EVALUATION RESULT'}</span>
                     <button className="modal-close" onClick={onClose}>
                         ×
                     </button>
@@ -54,23 +101,55 @@ export default function FeedbackModal({
 
                 <pre className="ascii-art">{asciiArt}</pre>
 
-                <div className="score-display">SCORE: {score}/100</div>
+                {!viewSolution && (
+                    <>
+                        <div className="score-display">SCORE: {score}/100</div>
 
-                <div className="feedback-section">
-                    <div className="feedback-label">FEEDBACK</div>
-                    <div className="feedback-content">{feedback}</div>
-                </div>
+                        <div className="feedback-section">
+                            <div className="feedback-label">FEEDBACK</div>
+                            <div className="feedback-content">{feedback}</div>
+                        </div>
+                    </>
+                )}
+
+                {viewSolution && (
+                    <div className="feedback-section">
+                        <div className="feedback-label">HINT</div>
+                        <div className="feedback-content">
+                            {loadingSolution ? 'Loading...' : solutionHint}
+                        </div>
+                    </div>
+                )}
 
                 <div className="modal-actions">
-                    <button className="btn" onClick={onTryAgain}>
-                        Try Again
-                    </button>
-                    <button className="btn" onClick={onNextExercise}>
-                        Next Exercise
-                    </button>
-                    <button className="btn" onClick={onClose}>
-                        View Solution
-                    </button>
+                    {!viewSolution ? (
+                        <>
+                            <button className="btn" onClick={handleTryAgain}>
+                                Try Again
+                            </button>
+                            <button className="btn" onClick={onNextExercise}>
+                                Next Exercise
+                            </button>
+                            <button className="btn" onClick={handleViewSolution}>
+                                View Solution
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button className="btn" onClick={handleTryAgain}>
+                                Try Again
+                            </button>
+                            <button className="btn" onClick={onNextExercise}>
+                                Next Exercise
+                            </button>
+                            <button className="btn" onClick={() => {
+                                setViewSolution(false);
+                                setSolutionHint('');
+                            }}>
+                                Back to Feedback
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

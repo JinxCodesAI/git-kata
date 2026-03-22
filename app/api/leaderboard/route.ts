@@ -22,37 +22,41 @@ export async function GET(request: Request) {
     });
     console.log(`[DB] Leaderboard query: totalUsers=${usersWithScores.length} limit=${limit} offset=${offset}`);
 
+    // Get total exercise count for the totalExercises field
+    const totalExercises = await prisma.exercise.count();
+
     const leaderboard = usersWithScores
       .map((user) => {
         const completedScores = user.scores.filter((s) => s.completions > 0);
         const totalScore = user.scores.reduce((sum, s) => sum + s.bestScore, 0);
-        const exercises = completedScores.length;
+        const exercisesCompleted = completedScores.length;
         const avgTime =
-          exercises > 0
-            ? completedScores.reduce((sum, s) => sum + (s.bestTime || 0), 0) / exercises
+          exercisesCompleted > 0
+            ? completedScores.reduce((sum, s) => sum + (s.bestTime || 0), 0) / exercisesCompleted
             : 0;
 
         return {
           userId: user.id,
-          name: user.name,
+          userName: user.name,
           score: totalScore,
-          exercises,
+          exercisesCompleted,
           avgTime: Math.round(avgTime),
         };
       })
-      .filter((u) => u.exercises > 0)
+      .filter((u) => u.exercisesCompleted > 0)
       .sort((a, b) => b.score - a.score);
 
-    const totalCount = leaderboard.length;
+    const totalParticipants = leaderboard.length;
     const paginatedLeaderboard = leaderboard.slice(offset, offset + limit);
     const rankedLeaderboard = paginatedLeaderboard.map((entry, index) => ({
       rank: offset + index + 1,
       ...entry,
+      totalExercises,
     }));
 
     return NextResponse.json({
-      leaderboard: rankedLeaderboard,
-      total: totalCount,
+      entries: rankedLeaderboard,
+      totalParticipants,
       limit,
       offset,
     });

@@ -644,14 +644,24 @@ timeLimit: 600
 description: |
   You have a 'feature' branch with 2 new commits.
   Merge it into 'main' branch.
-  
-  Hint: Switch to main first, then merge.
+hint: |
+  Switch to main first, then merge.
 initialBranch: feature  # Which branch to start on
 ```
 
-Note: `validationHints` is no longer stored in spec.yaml. Validation logic is
-encapsulated in `verify.sh` within the corresponding solution folder. This
-allows for more complex, multi-step verification using git commands.
+**Fields:**
+- `name`: Unique identifier for the exercise
+- `title`: Human-readable title
+- `level`: Difficulty level (1-4)
+- `category`: Category slug (e.g., branch, merge, commit)
+- `timeLimit`: Time limit in seconds (default 600)
+- `description`: Exercise instructions (shown to user during exercise)
+- `hint`: Optional solution hint (only shown when user clicks "View Solution")
+- `initialBranch`: Which branch the user starts on (or null for init exercises)
+
+**Note:** The `description` field should NOT contain solution hints. Hints must
+be in a separate `hint:` field. This ensures hints are only revealed when
+explicitly requested via the "View Solution" button.
 
 #### Benefits of File-Based Storage
 
@@ -681,6 +691,16 @@ Response: { id, level, category, title, description, timeLimit }
 Errors:
 - 404: Exercise not found
 - 500: Internal server error
+
+GET /api/exercises/[id]/solution
+Response: { id, hint }
+Errors:
+- 404: Exercise not found
+- 500: Internal server error
+
+Note: The description returned by GET /api/exercises/[id] does NOT contain hints.
+Hints are only available via the /solution endpoint and are revealed when the user
+clicks "View Solution" in the feedback modal.
 ```
 
 #### Sandbox
@@ -751,10 +771,15 @@ Errors:
 
 ```
 GET /api/profile
-Query: ?userId=<uuid> (optional - creates anonymous if missing)
-Response: { user, stats, progressByLevel, recentAttempts }
+Query: ?userId=<uuid> (required)
+Response: {
+  user: { id, name, createdAt, lastActive },
+  stats: { totalExercises, totalScore, averageScore, bestStreak },
+  progressByLevel: [{ level, completed, total, percentage }],
+  recentAttempts: [{ id, exerciseId, exerciseTitle, passed, score, createdAt }]
+}
 Errors:
-- 400: Invalid userId format
+- 400: Invalid userId format or missing userId
 - 500: Internal server error
 ```
 

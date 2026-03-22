@@ -321,6 +321,9 @@ category: merge
 timeLimit: 600
 description: |
   Exercise description in markdown format.
+  Do NOT include hints here - use the hint field below.
+hint: |
+  Optional hint shown only when user clicks "View Solution".
 initialBranch: feature
 ```
 

@@ -1756,8 +1756,8 @@ timeLimit: 600
 description: |
   You have a 'feature' branch with 2 new commits.
   Merge it into 'main' branch.
-  
-  Hint: Switch to main first, then merge.
+hint: |
+  Switch to main first, then merge.
 initialBranch: feature
 ```
 

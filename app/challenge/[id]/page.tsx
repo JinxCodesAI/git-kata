@@ -512,6 +512,7 @@ export default function ChallengePage() {
                     onClose={handleCloseFeedback}
                     score={feedback.score}
                     feedback={feedback.feedback}
+                    exerciseId={exercise.id}
                     onTryAgain={() => {
                         setShowFeedback(false);
                         handleResetExercise();

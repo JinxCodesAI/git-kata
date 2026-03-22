@@ -257,6 +257,7 @@ describe('FeedbackModal Component', () => {
     onClose: jest.fn(),
     score: 85,
     feedback: 'Great job! You successfully merged the branches.',
+    exerciseId: 'test-exercise-123',
     onTryAgain: jest.fn(),
     onNextExercise: jest.fn(),
   };
@@ -672,6 +673,7 @@ describe('Component Integration', () => {
         onClose: jest.fn(),
         score: 50,
         feedback: longFeedback,
+        exerciseId: 'test-exercise-123',
         onTryAgain: jest.fn(),
         onNextExercise: jest.fn(),
       })
@@ -687,6 +689,7 @@ describe('Component Integration', () => {
         onClose: jest.fn(),
         score: 70,
         feedback: 'Exactly 70 is passing',
+        exerciseId: 'test-exercise-123',
         onTryAgain: jest.fn(),
         onNextExercise: jest.fn(),
       })
@@ -703,6 +706,7 @@ describe('Component Integration', () => {
         onClose: jest.fn(),
         score: 69,
         feedback: '69 is failing',
+        exerciseId: 'test-exercise-123',
         onTryAgain: jest.fn(),
         onNextExercise: jest.fn(),
       })

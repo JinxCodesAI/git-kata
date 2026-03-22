@@ -11,7 +11,9 @@ interface ProgressByLevel {
 }
 
 interface RecentAttempt {
-  exerciseName: string;
+  id: string;
+  exerciseId: string;
+  exerciseTitle: string;
   passed: boolean;
   score: number;
   createdAt: Date;
@@ -34,9 +36,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
     }
 
-    // Validate userId format (must be valid UUID)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(userId)) {
+    // Validate userId format (must be non-empty string, max 100 chars)
+    if (!userId || userId.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(userId)) {
       return NextResponse.json({ error: 'Invalid userId format' }, { status: 400 });
     }
 
@@ -152,7 +153,9 @@ export async function GET(request: Request) {
     console.log(`[DB] Recent attempts lookup: userId=${user.id} count=${recentAttemptsRaw.length}`);
 
     const recentAttempts: RecentAttempt[] = recentAttemptsRaw.map((a) => ({
-      exerciseName: a.exercise.title,
+      id: a.id,
+      exerciseId: a.exerciseId,
+      exerciseTitle: a.exercise.title,
       passed: a.passed,
       score: a.score,
       createdAt: a.createdAt,

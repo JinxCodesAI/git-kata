@@ -24,6 +24,7 @@ export interface ExerciseSpec {
   category: string;
   timeLimit: number;
   description: string;
+  hint?: string;
   initialBranch: string | null;
 }
 
