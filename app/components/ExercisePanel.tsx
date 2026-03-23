@@ -11,6 +11,8 @@ interface Exercise {
     initialBranch: string | null;
 }
 
+import { getLevelName } from '@/lib/levels';
+
 interface ExercisePanelProps {
     exercise: Exercise;
     currentBranch?: string;
@@ -22,15 +24,6 @@ export default function ExercisePanel({
     currentBranch,
     timer,
 }: ExercisePanelProps) {
-    const getLevelName = (level: number): string => {
-        const levels: Record<number, string> = {
-            1: 'Beginner',
-            2: 'Intermediate',
-            3: 'Advanced',
-            4: 'Expert',
-        };
-        return levels[level] || 'Unknown';
-    };
 
     const formatTimeLimit = (seconds: number): string => {
         const mins = Math.floor(seconds / 60);

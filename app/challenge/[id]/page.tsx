@@ -6,6 +6,7 @@ import Link from 'next/link';
 import ExercisePanel from '@/app/components/ExercisePanel';
 import FeedbackModal from '@/app/components/FeedbackModal';
 import ErrorModal from '@/app/components/ErrorModal';
+import { LEVEL_NAME_TO_NUMBER } from '@/lib/levels';
 
 interface HistoryEntry {
     command: string;
@@ -33,14 +34,6 @@ interface EvaluationResult {
     feedback: string;
     verificationOutput?: string;
 }
-
-// Map level names to level numbers
-const LEVEL_NAME_TO_NUMBER: Record<string, number> = {
-    'beginner': 1,
-    'intermediate': 2,
-    'advanced': 3,
-    'expert': 4,
-};
 
 export default function ChallengePage() {
     const params = useParams();
