@@ -519,9 +519,24 @@ export default function ChallengePage() {
                         setShowFeedback(false);
                         handleResetExercise();
                     }}
-                    onNextExercise={() => {
+                    onNextExercise={async () => {
                         setShowFeedback(false);
-                        router.push('/');
+                        try {
+                            const res = await fetch(`/api/exercises?level=${exercise.level}`);
+                            if (!res.ok) throw new Error('Failed to fetch exercises');
+                            const exercises = await res.json();
+                            
+                            const otherExercises = exercises.filter((e: Exercise) => e.id !== exercise.id);
+                            if (otherExercises.length === 0) {
+                                router.push('/');
+                                return;
+                            }
+                            const randomIndex = Math.floor(Math.random() * otherExercises.length);
+                            router.push(`/challenge/${otherExercises[randomIndex].id}`);
+                        } catch (err) {
+                            console.error('Error fetching next exercise:', err);
+                            router.push('/');
+                        }
                     }}
                 />
             )}
