@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useEffect } from 'react';
 
+import { LEVELS } from '@/lib/levels';
+
 const ASCII_ART = `
 ███████╗ ██╗████████╗
 ██╔════╝ ██║╚══██╔══╝
@@ -17,12 +19,6 @@ const ASCII_ART = `
                               ██║  ██╗██║  ██║   ██║   ██║  ██║
                               ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
 `;
-const LEVELS = [
-  { id: 1, slug: 'beginner', name: 'BEGINNER', description: 'Start your Git journey here' },
-  { id: 2, slug: 'intermediate', name: 'INTERMEDIATE', description: 'Level up your skills' },
-  { id: 3, slug: 'advanced', name: 'ADVANCED', description: 'Master complex workflows' },
-  { id: 4, slug: 'expert', name: 'EXPERT', description: 'Git ninja certification' },
-];
 
 export default function LandingPage() {
   useEffect(() => {
