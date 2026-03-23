@@ -26,7 +26,11 @@ const LEVELS = [
 
 export default function LandingPage() {
   useEffect(() => {
-    const userId = localStorage.getItem('gitkata_user_id');
+    let userId = localStorage.getItem('gitkata_user_id');
+    if (!userId) {
+      userId = crypto.randomUUID();
+      localStorage.setItem('gitkata_user_id', userId);
+    }
     console.log('USER_ID:', userId);
   }, []);
 

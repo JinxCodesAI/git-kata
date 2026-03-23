@@ -60,10 +60,11 @@ export default function ProfilePage() {
   useEffect(() => {
     async function fetchProfile() {
       try {
-        const userId = localStorage.getItem('gitkata_user_id');
+        let userId = localStorage.getItem('gitkata_user_id');
         
         if (!userId) {
-          throw new Error('User ID not found. Please refresh the page.');
+          userId = crypto.randomUUID();
+          localStorage.setItem('gitkata_user_id', userId);
         }
         
         const response = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`);

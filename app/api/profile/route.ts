@@ -42,14 +42,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Invalid userId format' }, { status: 400 });
     }
 
-    // Find existing user
-    const user = await prisma.user.findUnique({
+    // Find existing user (or create new one if not found)
+    let user = await prisma.user.findUnique({
       where: { id: userId },
     });
     logger.debug('User lookup:', 'userId=', userId, 'found=', !!user);
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      logger.debug('User not found, creating new user:', 'userId=', userId);
+      user = await prisma.user.create({
+        data: {
+          id: userId,
+          name: 'anonymous',
+        },
+      });
     }
 
     // Get all exercises count by level
