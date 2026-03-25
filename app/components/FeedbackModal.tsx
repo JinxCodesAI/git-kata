@@ -93,8 +93,6 @@ export default function FeedbackModal({
         action: () => backToFeedbackRef.current(),
     });
 
-    if (!isOpen) return null;
-
     const isPass = score >= 70;
     const asciiArt = viewSolution ? SOLUTION_ASCII : (isPass ? PASS_ASCII : FAIL_ASCII);
 
@@ -150,6 +148,8 @@ export default function FeedbackModal({
     useEffect(() => {
         backToFeedbackRef.current = handleBackToFeedback;
     }, [handleBackToFeedback]);
+
+    if (!isOpen) return null;
 
     return (
         <div className="modal-overlay" onClick={onClose}>
