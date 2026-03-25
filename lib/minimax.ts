@@ -77,11 +77,19 @@ Important notes:
       
       // Find the text content (not thinking block) by iterating through content array
       let content = '';
-      for (const item of data.content || []) {
-        if (item.type === 'text') {
-          content = item.text || '';
-          break;
+      if (data.content && Array.isArray(data.content)) {
+        for (const item of data.content) {
+          if (item.type === 'text') {
+            content = item.text || '';
+            break;
+          }
         }
+      } else {
+        logger.error('LLM_RESPONSE_UNEXPECTED_STRUCTURE', {
+          dataKeys: Object.keys(data),
+          contentType: typeof data.content,
+          isArray: Array.isArray(data.content),
+        });
       }
       logger.debug('LLM response content received, length:', content.length);
       
@@ -89,11 +97,27 @@ Important notes:
       try {
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-          logger.debug('Parsed JSON from LLM response');
-          return JSON.parse(jsonMatch[0]);
+          const extractedJson = jsonMatch[0];
+          logger.debug('Extracted JSON from response, length:', extractedJson.length);
+          try {
+            return JSON.parse(extractedJson);
+          } catch (parseError) {
+            logger.error('LLM_RESPONSE_PARSE_FAILED', {
+              rawContent: content,
+              extractedJson: extractedJson,
+              parseError: String(parseError),
+            });
+            throw parseError;
+          }
+        } else {
+          // No JSON found in response
+          logger.error('LLM_RESPONSE_NO_JSON', {
+            rawContent: content,
+            contentPreview: content.substring(0, 500),
+          });
         }
       } catch (e) {
-        logger.error('Failed to parse LLM response:', content);
+        // Already logged in the nested catch blocks above
       }
       
       // Fallback
@@ -105,7 +129,13 @@ Important notes:
       };
     } catch (error) {
       lastError = error as Error;
-      logger.error('Attempt', attempt + 1, 'failed:', error);
+      logger.error('LLM_ATTEMPT_FAILED', {
+        attempt: attempt + 1,
+        maxRetries,
+        error: String(error),
+        errorName: error instanceof Error ? error.name : 'Unknown',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       if (attempt < maxRetries) {
         // Exponential backoff: 1s, 2s, 4s
         const delay = Math.pow(2, attempt) * 1000;
@@ -116,7 +146,11 @@ Important notes:
   }
   
   // After retry limit exhausted, throw error to result in 500 response
-  logger.error('All retries exhausted, throwing error');
+  logger.error('LLM_ALL_RETRIES_EXHAUSTED', {
+    totalAttempts: maxRetries + 1,
+    lastError: lastError ? String(lastError) : null,
+    lastErrorMessage: lastError instanceof Error ? lastError.message : null,
+  });
   throw lastError;
 }
 

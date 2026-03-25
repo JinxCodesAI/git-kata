@@ -25,7 +25,7 @@ interface KeyboardShortcutsContextType {
 const KeyboardShortcutsContext = createContext<KeyboardShortcutsContextType | null>(null);
 
 export function KeyboardShortcutsProvider({ children }: { children: React.ReactNode }) {
-    const [isEnabled, setIsEnabled] = useState(false);
+    const [isEnabled, setIsEnabled] = useState(true);
     const [actionsVersion, setActionsVersion] = useState(0);
     const registeredActionsRef = useRef<Map<string, ShortcutAction>>(new Map());
 
