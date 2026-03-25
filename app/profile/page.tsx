@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Home } from 'lucide-react';
+import { Home, Pencil, Check, X } from 'lucide-react';
 import ErrorModal from '@/app/components/ErrorModal';
 
 interface User {
@@ -56,6 +56,9 @@ export default function ProfilePage() {
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     async function fetchProfile() {
@@ -82,6 +85,50 @@ export default function ProfilePage() {
 
     fetchProfile();
   }, []);
+
+  const handleEditName = () => {
+    if (profileData) {
+      setEditName(profileData.user.name);
+      setIsEditingName(true);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingName(false);
+    setEditName('');
+  };
+
+  const handleSaveName = async () => {
+    if (!profileData || !editName.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const userId = localStorage.getItem('gitkata_user_id');
+      if (!userId) return;
+
+      const response = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, name: editName.trim() }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to update name');
+      }
+
+      const data = await response.json();
+      setProfileData({
+        ...profileData,
+        user: data.user,
+      });
+      setIsEditingName(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update name');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -202,9 +249,87 @@ export default function ProfilePage() {
                 USER INFO
               </div>
               <div style={{ borderLeft: '2px solid var(--border)', paddingLeft: '1rem' }}>
-                <div style={{ marginBottom: '0.25rem' }}>
-                  <span style={{ color: 'var(--text-dim)' }}>USER:</span>{' '}
-                  <span style={{ color: 'var(--text-bright)' }}>{user.name}</span>
+                <div style={{ marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ color: 'var(--text-dim)' }}>USER:</span>
+                  {isEditingName ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        maxLength={30}
+                        autoFocus
+                        style={{
+                          background: 'var(--bg-tertiary)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-bright)',
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '4px',
+                          width: '200px',
+                          fontFamily: 'inherit',
+                          fontSize: 'inherit',
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveName();
+                          if (e.key === 'Escape') handleCancelEdit();
+                        }}
+                      />
+                      <button
+                        onClick={handleSaveName}
+                        disabled={isSaving || !editName.trim()}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--success)',
+                          cursor: isSaving ? 'not-allowed' : 'pointer',
+                          padding: '0.25rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                        title="Save"
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        disabled={isSaving}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--error)',
+                          cursor: 'pointer',
+                          padding: '0.25rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                        title="Cancel"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span style={{ color: 'var(--text-bright)' }}>{user.name}</span>
+                      <button
+                        onClick={handleEditName}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-dim)',
+                          cursor: 'pointer',
+                          padding: '0.25rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          transition: 'color 0.2s',
+                        }}
+                        title="Edit name"
+                        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    </>
+                  )}
                 </div>
                 <div style={{ marginBottom: '0.25rem' }}>
                   <span style={{ color: 'var(--text-dim)' }}>Joined:</span>{' '}

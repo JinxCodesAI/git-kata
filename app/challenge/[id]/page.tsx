@@ -63,10 +63,21 @@ export default function ChallengePage() {
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string>('');
     const [currentBranch, setCurrentBranch] = useState<string | null>(null);
+    const [showTimeoutModal, setShowTimeoutModal] = useState(false);
 
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
     const startTimeRef = useRef<number>(0);
     const outputRef = useRef<HTMLDivElement>(null);
+
+    const resetInactivityTimer = useCallback(() => {
+        if (inactivityTimerRef.current) {
+            clearTimeout(inactivityTimerRef.current);
+        }
+        inactivityTimerRef.current = setTimeout(() => {
+            setShowTimeoutModal(true);
+        }, 15 * 60 * 1000); // 15 minutes
+    }, []);
 
     // Refs to store handler functions for shortcuts
     const submitSolutionRef = useRef<() => void>(() => {});
@@ -149,6 +160,7 @@ export default function ChallengePage() {
                 if (abortController.signal.aborted) return;
                 setSession(sessionData);
                 startTimeRef.current = Date.now();
+                resetInactivityTimer();
 
                 // Get initial branch
                 const stateRes = await fetch(`/api/sandbox/state/${sessionData.sessionId}?userId=${userId}`, {
@@ -186,8 +198,11 @@ export default function ChallengePage() {
             if (timerRef.current) {
                 clearInterval(timerRef.current);
             }
+            if (inactivityTimerRef.current) {
+                clearTimeout(inactivityTimerRef.current);
+            }
         };
-    }, [exerciseId]);
+    }, [exerciseId, resetInactivityTimer]);
 
     // Timer countdown
     useEffect(() => {
@@ -222,6 +237,7 @@ export default function ChallengePage() {
         if (!session) return;
 
         const userId = localStorage.getItem('gitkata_user_id');
+        resetInactivityTimer();
         try {
             const res = await fetch('/api/sandbox/exec', {
                 method: 'POST',
@@ -572,6 +588,23 @@ export default function ChallengePage() {
                 onClose={() => setShowErrorModal(false)}
                 message={errorMessage}
             />
+
+            {showTimeoutModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content" style={{ textAlign: 'center', maxWidth: '400px' }}>
+                        <div className="modal-header" style={{ justifyContent: 'center' }}>
+                            <span style={{ color: 'var(--error)' }}>SESSION EXPIRED</span>
+                        </div>
+                        <div className="feedback-section" style={{ border: 'none', margin: '2rem 0' }}>
+                            <p style={{ color: 'var(--text-bright)' }}>Your session has timed out due to 15 minutes of inactivity.</p>
+                            <p className="text-dim" style={{ marginTop: '0.5rem' }}>The container has been destroyed.</p>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => router.push('/')} style={{ width: '100%' }}>
+                            Return Home
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

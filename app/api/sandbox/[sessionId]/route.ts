@@ -25,7 +25,7 @@ export async function DELETE(
     const session = sessionManager.getSession(sessionId);
 
     if (!session) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+      return NextResponse.json({ success: true, message: 'Session already removed' });
     }
 
     if (session.userId !== userId) {

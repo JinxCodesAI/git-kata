@@ -187,3 +187,63 @@ export async function GET(request: Request) {
     );
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { userId, name } = body;
+
+    // Validate required fields
+    if (!userId) {
+      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    }
+
+    if (!name || typeof name !== 'string') {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    }
+
+    // Validate name format: 1-30 characters, alphanumeric with spaces
+    const trimmedName = name.trim();
+    if (trimmedName.length < 1 || trimmedName.length > 30) {
+      return NextResponse.json(
+        { error: 'Name must be between 1 and 30 characters' },
+        { status: 400 }
+      );
+    }
+
+    if (!/^[a-zA-Z0-9 ]+$/.test(trimmedName)) {
+      return NextResponse.json(
+        { error: 'Name can only contain letters, numbers, and spaces' },
+        { status: 400 }
+      );
+    }
+
+    // Validate userId format
+    if (userId.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(userId)) {
+      return NextResponse.json({ error: 'Invalid userId format' }, { status: 400 });
+    }
+
+    // Update user name
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { name: trimmedName },
+    });
+
+    logger.debug('User name updated:', 'userId=', userId, 'newName=', trimmedName);
+
+    return NextResponse.json({
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        createdAt: updatedUser.createdAt,
+        lastActive: updatedUser.lastActive,
+      },
+    });
+  } catch (error) {
+    logger.error('Error updating profile:', error);
+    return NextResponse.json(
+      { error: 'Failed to update profile' },
+      { status: 500 }
+    );
+  }
+}

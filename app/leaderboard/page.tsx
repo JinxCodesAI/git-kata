@@ -32,7 +32,7 @@ function formatTime(seconds: number): string {
 
 async function getLeaderboard(): Promise<LeaderboardData> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/leaderboard`, {
+    const response = await fetch('/api/leaderboard', {
       cache: 'no-store',
     });
 

@@ -47,10 +47,15 @@ Always respond with valid JSON in this exact format:
 {"passed": boolean, "score": number, "feedback": "string"}
 
 Score guidelines:
-- 90-100: Perfect solution with good practices
-- 70-89: Correct solution but could be improved
+- 100: Perfect solution with good practices
+- 70-99: Correct solution but could be improved
 - 50-69: Partially correct, missing key steps
-- 0-49: Incorrect or incomplete solution`,
+- 0-49: Incorrect or incomplete solution
+
+Important notes:
+- The verification script output is only a helper indicator, not the source of truth
+- If the verification script is buggy or incorrect, base your score on whether the student fulfilled the task as described in the exercise description
+- Avoid nitpicking: minor formatting differences, whitespace variations, or cosmetic changes should not reduce the score if the core task is completed correctly`,
           messages: [
             {
               role: 'user',
