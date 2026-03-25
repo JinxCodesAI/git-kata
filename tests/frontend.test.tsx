@@ -93,8 +93,8 @@ describe('Terminal Component', () => {
 
   it('should render with initial history', () => {
     const initialHistory = [
-      { command: 'git init', output: 'Initialized empty Git repository' },
-      { command: 'git add .', output: '' },
+      { id: '1', command: 'git init', output: 'Initialized empty Git repository' },
+      { id: '2', command: 'git add .', output: '' },
     ];
     
     render(React.createElement(Terminal, { initialHistory }));
@@ -133,7 +133,7 @@ describe('Terminal Component', () => {
   });
 
   it('should not submit empty commands', () => {
-    const initialHistory = [{ command: 'git init', output: '' }];
+    const initialHistory = [{ id: '1', command: 'git init', output: '' }];
     render(React.createElement(Terminal, { initialHistory }));
     
     const input = screen.getByRole('textbox');
@@ -153,7 +153,7 @@ describe('Terminal Component', () => {
   });
 
   it('should display command prompts correctly', () => {
-    render(React.createElement(Terminal, { initialHistory: [{ command: 'git log', output: 'commit abc' }] }));
+    render(React.createElement(Terminal, { initialHistory: [{ id: '1', command: 'git log', output: 'commit abc' }] }));
     
     const prompts = screen.getAllByText('$');
     expect(prompts.length).toBeGreaterThan(0);

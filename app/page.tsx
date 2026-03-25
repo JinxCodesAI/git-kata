@@ -2,6 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import ShortcutBadge from '@/app/components/shortcuts/ShortcutBadge';
+import { useRegisterShortcutAction, ShortcutAction } from '@/app/context/KeyboardShortcutsContext';
 
 const ASCII_ART = `
 ███████╗ ██╗████████╗
@@ -25,6 +28,8 @@ const LEVELS = [
 ];
 
 export default function LandingPage() {
+  const router = useRouter();
+
   useEffect(() => {
     let userId = localStorage.getItem('gitkata_user_id');
     if (!userId) {
@@ -33,6 +38,43 @@ export default function LandingPage() {
     }
     console.log('USER_ID:', userId);
   }, []);
+
+  // Register keyboard shortcuts for landing page - hooks must be called at top level
+  const navigateToLevel = (slug: string) => {
+    router.push(`/challenge/${slug}`);
+  };
+
+  useRegisterShortcutAction('landing.beginner', {
+    key: '1',
+    label: 'Beginner Level',
+    view: 'LANDING',
+    modifiers: [],
+    action: () => navigateToLevel('beginner'),
+  });
+
+  useRegisterShortcutAction('landing.intermediate', {
+    key: '2',
+    label: 'Intermediate Level',
+    view: 'LANDING',
+    modifiers: [],
+    action: () => navigateToLevel('intermediate'),
+  });
+
+  useRegisterShortcutAction('landing.advanced', {
+    key: '3',
+    label: 'Advanced Level',
+    view: 'LANDING',
+    modifiers: [],
+    action: () => navigateToLevel('advanced'),
+  });
+
+  useRegisterShortcutAction('landing.expert', {
+    key: '4',
+    label: 'Expert Level',
+    view: 'LANDING',
+    modifiers: [],
+    action: () => navigateToLevel('expert'),
+  });
 
   return (
     <div className="app-container">
@@ -48,7 +90,7 @@ export default function LandingPage() {
         <div className="terminal-container">
           <div className="terminal-output">
             <pre className="ascii-art">{ASCII_ART}</pre>
-            
+
             <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
               <span style={{ color: 'var(--text-dim)' }}>
                 Master Git through hands-on exercises
@@ -69,7 +111,7 @@ export default function LandingPage() {
                   className="level-btn"
                   data-level={level.id}
                 >
-                  <div style={{ fontWeight: 'bold' }}>[{level.id}] {level.name}</div>
+                  <div style={{ fontWeight: 'bold' }}>[{level.id}] {level.name}<ShortcutBadge shortcut={String(level.id)} /></div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem' }}>
                     {level.description}
                   </div>

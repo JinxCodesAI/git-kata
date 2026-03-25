@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import '@/lib/startup'; // Initialize container pool on startup
+import { KeyboardShortcutsProvider } from '@/app/context/KeyboardShortcutsContext';
+import KeyboardShortcutsLegend from '@/app/components/shortcuts/KeyboardShortcutsLegend';
 
 export const metadata: Metadata = {
   title: 'Git Kata',
@@ -14,7 +16,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="matrix-theme">{children}</body>
+      <body className="matrix-theme">
+        <KeyboardShortcutsProvider>
+          {children}
+          <KeyboardShortcutsLegend />
+        </KeyboardShortcutsProvider>
+      </body>
     </html>
   );
 }

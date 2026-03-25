@@ -1,4 +1,9 @@
+'use client';
+
 import Link from 'next/link';
+import { useState, useEffect, useRef } from 'react';
+import ShortcutBadge from '@/app/components/shortcuts/ShortcutBadge';
+import { useRegisterShortcutAction } from '@/app/context/KeyboardShortcutsContext';
 
 interface LeaderboardEntry {
   rank: number;
@@ -14,6 +19,15 @@ interface LeaderboardData {
   entries: LeaderboardEntry[];
   currentUserEntry?: LeaderboardEntry;
   totalParticipants: number;
+}
+
+function formatTime(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds}s`;
 }
 
 async function getLeaderboard(): Promise<LeaderboardData> {
@@ -36,17 +50,77 @@ async function getLeaderboard(): Promise<LeaderboardData> {
   }
 }
 
-function formatTime(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
-}
+export default function LeaderboardPage() {
+  const [data, setData] = useState<LeaderboardData>({ entries: [], totalParticipants: 0 });
+  const [loading, setLoading] = useState(true);
 
-export default async function LeaderboardPage() {
-  const data = await getLeaderboard();
+  // Refs for shortcut actions
+  const showAllRef = useRef<() => void>(() => {});
+  const myPositionRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    async function fetchData() {
+      const result = await getLeaderboard();
+      setData(result);
+      setLoading(false);
+    }
+    fetchData();
+  }, []);
+
+  // Placeholder handlers for SHOW ALL and MY POSITION
+  const handleShowAll = () => {
+    console.log('[Leaderboard] SHOW ALL clicked (placeholder)');
+  };
+
+  const handleMyPosition = () => {
+    console.log('[Leaderboard] MY POSITION clicked (placeholder)');
+  };
+
+  useEffect(() => {
+    showAllRef.current = handleShowAll;
+  }, [handleShowAll]);
+
+  useEffect(() => {
+    myPositionRef.current = handleMyPosition;
+  }, [handleMyPosition]);
+
+  // Register keyboard shortcuts
+  useRegisterShortcutAction('leaderboard.showAll', {
+    key: 'a',
+    label: 'Show All',
+    view: 'LEADERBOARD',
+    modifiers: [],
+    action: () => showAllRef.current(),
+  });
+
+  useRegisterShortcutAction('leaderboard.myPosition', {
+    key: 'm',
+    label: 'My Position',
+    view: 'LEADERBOARD',
+    modifiers: [],
+    action: () => myPositionRef.current(),
+  });
+
+  if (loading) {
+    return (
+      <div className="app-container">
+        <nav className="navbar">
+          <Link href="/" className="navbar-logo">GIT-KATA</Link>
+          <div className="navbar-links">
+            <Link href="/profile" className="navbar-link">PROFILE</Link>
+            <Link href="/leaderboard" className="navbar-link">LEADERBOARD</Link>
+          </div>
+        </nav>
+        <main className="main-content">
+          <div className="terminal-container">
+            <div className="terminal-output" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+              <span style={{ color: 'var(--text-dim)' }}>Loading leaderboard...</span>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
@@ -84,8 +158,8 @@ export default async function LeaderboardPage() {
             ) : (
               <>
                 <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-                  <button className="btn">SHOW ALL</button>
-                  <button className="btn">MY POSITION</button>
+                  <button className="btn" onClick={handleShowAll}>SHOW ALL<ShortcutBadge shortcut="a" /></button>
+                  <button className="btn" onClick={handleMyPosition}>MY POSITION<ShortcutBadge shortcut="m" /></button>
                 </div>
 
                 <table className="leaderboard-table">

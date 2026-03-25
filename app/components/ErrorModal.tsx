@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import ShortcutBadge from './shortcuts/ShortcutBadge';
+import { useRegisterShortcutAction } from '@/app/context/KeyboardShortcutsContext';
 
 interface ErrorModalProps {
     isOpen: boolean;
@@ -15,6 +17,14 @@ export default function ErrorModal({
     title = 'ERROR',
     message,
 }: ErrorModalProps) {
+    useRegisterShortcutAction('error.close', {
+        key: 'Esc',
+        label: 'Close',
+        view: 'ERROR',
+        modifiers: [],
+        action: onClose,
+    });
+
     if (!isOpen) return null;
 
     return (
@@ -35,7 +45,7 @@ export default function ErrorModal({
 
                 <div className="modal-actions">
                     <button className="btn" onClick={onClose}>
-                        Close
+                        Close<ShortcutBadge shortcut="esc" />
                     </button>
                 </div>
             </div>

@@ -6,8 +6,11 @@ import Link from 'next/link';
 import ExercisePanel from '@/app/components/ExercisePanel';
 import FeedbackModal from '@/app/components/FeedbackModal';
 import ErrorModal from '@/app/components/ErrorModal';
+import ShortcutBadge from '@/app/components/shortcuts/ShortcutBadge';
+import { useRegisterShortcutAction, ShortcutAction } from '@/app/context/KeyboardShortcutsContext';
 
 interface HistoryEntry {
+    id: string;
     command: string;
     output: string;
 }
@@ -64,6 +67,16 @@ export default function ChallengePage() {
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const startTimeRef = useRef<number>(0);
     const outputRef = useRef<HTMLDivElement>(null);
+
+    // Refs to store handler functions for shortcuts
+    const submitSolutionRef = useRef<() => void>(() => {});
+    const resetExerciseRef = useRef<() => void>(() => {});
+    const skipExerciseRef = useRef<() => void>(() => {});
+
+    // Register keyboard shortcuts with refs to handlers
+    useRegisterShortcutAction('challenge.submit', { key: 'Enter', label: 'Submit Solution', view: 'CHALLENGE', modifiers: [], action: () => submitSolutionRef.current() });
+    useRegisterShortcutAction('challenge.reset', { key: 'r', label: 'Reset Exercise', view: 'CHALLENGE', modifiers: [], action: () => resetExerciseRef.current() });
+    useRegisterShortcutAction('challenge.skip', { key: 'k', label: 'Skip Exercise', view: 'CHALLENGE', modifiers: [], action: () => skipExerciseRef.current() });
 
     // Fetch exercise and initialize session
     useEffect(() => {
@@ -229,7 +242,7 @@ export default function ChallengePage() {
             const output = data.output || '';
 
             // Only add to history if command was successful
-            setHistory((prev) => [...prev, { command, output }]);
+            setHistory((prev) => [...prev, { id: crypto.randomUUID(), command, output }]);
 
             // Update current branch if command was git checkout or git switch
             if (command.startsWith('git checkout') || command.startsWith('git switch')) {
@@ -381,6 +394,19 @@ export default function ChallengePage() {
         }
     };
 
+    // Update shortcut refs when handlers change
+    useEffect(() => {
+        submitSolutionRef.current = handleSubmitSolution;
+    }, [handleSubmitSolution]);
+
+    useEffect(() => {
+        resetExerciseRef.current = handleResetExercise;
+    }, [handleResetExercise]);
+
+    useEffect(() => {
+        skipExerciseRef.current = handleSkipExercise;
+    }, [handleSkipExercise]);
+
     // Format time remaining
     const formatTime = (seconds: number): string => {
         const mins = Math.floor(seconds / 60);
@@ -457,8 +483,8 @@ export default function ChallengePage() {
                                 <p className="text-dim">Hint: All commands must start with &quot;git&quot;</p>
                             </div>
                         ) : (
-                            history.map((entry, index) => (
-                                <div key={index}>
+                            history.map((entry) => (
+                                <div key={entry.id}>
                                     <p className="terminal-line command">
                                         <span className="terminal-prompt">$</span> {entry.command}
                                     </p>
@@ -497,13 +523,13 @@ export default function ChallengePage() {
                         onClick={handleSubmitSolution}
                         disabled={isSubmitting}
                     >
-                        {isSubmitting ? 'Submitting...' : 'Submit Solution'}
+                        {isSubmitting ? 'Submitting...' : 'Submit Solution'}<ShortcutBadge shortcut="enter" />
                     </button>
                     <button className="btn" onClick={handleResetExercise}>
-                        Reset Exercise
+                        Reset Exercise<ShortcutBadge shortcut="r" />
                     </button>
                     <button className="btn" onClick={handleSkipExercise}>
-                        Skip
+                        Skip<ShortcutBadge shortcut="k" />
                     </button>
                 </div>
             </main>

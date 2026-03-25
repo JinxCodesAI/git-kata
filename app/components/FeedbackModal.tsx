@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import ShortcutBadge from './shortcuts/ShortcutBadge';
+import { useRegisterShortcutAction, ShortcutAction } from '@/app/context/KeyboardShortcutsContext';
 
 interface FeedbackModalProps {
     isOpen: boolean;
@@ -52,6 +54,45 @@ export default function FeedbackModal({
     const [loadingSolution, setLoadingSolution] = useState(false);
     const [solutionHint, setSolutionHint] = useState<string>('');
 
+    // Refs for shortcut actions
+    const tryAgainRef = useRef<() => void>(() => {});
+    const nextExerciseRef = useRef<() => void>(() => {});
+    const viewSolutionRef = useRef<() => void>(() => {});
+    const backToFeedbackRef = useRef<() => void>(() => {});
+
+    // Register shortcuts
+    useRegisterShortcutAction('feedback.tryAgain', {
+        key: 't',
+        label: 'Try Again',
+        view: 'FEEDBACK',
+        modifiers: [],
+        action: () => tryAgainRef.current(),
+    });
+
+    useRegisterShortcutAction('feedback.next', {
+        key: 'n',
+        label: 'Next Exercise',
+        view: 'FEEDBACK',
+        modifiers: [],
+        action: () => nextExerciseRef.current(),
+    });
+
+    useRegisterShortcutAction('feedback.viewSolution', {
+        key: 'v',
+        label: 'View Solution',
+        view: 'FEEDBACK',
+        modifiers: [],
+        action: () => viewSolutionRef.current(),
+    });
+
+    useRegisterShortcutAction('feedback.back', {
+        key: 'b',
+        label: 'Back to Feedback',
+        view: 'FEEDBACK',
+        modifiers: [],
+        action: () => backToFeedbackRef.current(),
+    });
+
     if (!isOpen) return null;
 
     const isPass = score >= 70;
@@ -59,7 +100,6 @@ export default function FeedbackModal({
 
     const handleViewSolution = async () => {
         if (solutionHint) {
-            // Already loaded, just show it
             setViewSolution(true);
             return;
         }
@@ -88,6 +128,28 @@ export default function FeedbackModal({
         setSolutionHint('');
         onTryAgain();
     };
+
+    const handleBackToFeedback = () => {
+        setViewSolution(false);
+        setSolutionHint('');
+    };
+
+    // Update refs when handlers change
+    useEffect(() => {
+        tryAgainRef.current = handleTryAgain;
+    }, [handleTryAgain]);
+
+    useEffect(() => {
+        nextExerciseRef.current = onNextExercise;
+    }, [onNextExercise]);
+
+    useEffect(() => {
+        viewSolutionRef.current = handleViewSolution;
+    }, [handleViewSolution]);
+
+    useEffect(() => {
+        backToFeedbackRef.current = handleBackToFeedback;
+    }, [handleBackToFeedback]);
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -125,28 +187,25 @@ export default function FeedbackModal({
                     {!viewSolution ? (
                         <>
                             <button className="btn" onClick={handleTryAgain}>
-                                Try Again
+                                Try Again<ShortcutBadge shortcut="t" />
                             </button>
                             <button className="btn" onClick={onNextExercise}>
-                                Next Exercise
+                                Next Exercise<ShortcutBadge shortcut="n" />
                             </button>
                             <button className="btn" onClick={handleViewSolution}>
-                                View Solution
+                                View Solution<ShortcutBadge shortcut="v" />
                             </button>
                         </>
                     ) : (
                         <>
                             <button className="btn" onClick={handleTryAgain}>
-                                Try Again
+                                Try Again<ShortcutBadge shortcut="t" />
                             </button>
                             <button className="btn" onClick={onNextExercise}>
-                                Next Exercise
+                                Next Exercise<ShortcutBadge shortcut="n" />
                             </button>
-                            <button className="btn" onClick={() => {
-                                setViewSolution(false);
-                                setSolutionHint('');
-                            }}>
-                                Back to Feedback
+                            <button className="btn" onClick={handleBackToFeedback}>
+                                Back to Feedback<ShortcutBadge shortcut="b" />
                             </button>
                         </>
                     )}

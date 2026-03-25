@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, KeyboardEvent, FormEvent } from 'react';
 
 interface HistoryEntry {
+    id: string;
     command: string;
     output: string;
 }
@@ -29,6 +30,7 @@ export default function Terminal({ initialHistory = [] }: TerminalProps) {
 
         const command = input.trim();
         const newEntry: HistoryEntry = {
+            id: crypto.randomUUID(),
             command,
             output: '',
         };
@@ -50,8 +52,8 @@ export default function Terminal({ initialHistory = [] }: TerminalProps) {
     return (
         <div className="terminal-container" onClick={focusInput}>
             <div className="terminal-output" ref={outputRef} onClick={focusInput}>
-                {history.map((entry, index) => (
-                    <div key={index}>
+                {history.map((entry) => (
+                    <div key={entry.id}>
                         <p className="terminal-line command">
                             <span className="terminal-prompt">$</span> {entry.command}
                         </p>
